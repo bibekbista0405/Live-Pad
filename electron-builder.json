@@ -28,7 +28,7 @@
         "arch": ["x64"]
       }
     ],
-    "icon": "public/icon.png"
+    "icon": "public/brand/livepad-icon-512.png"
   },
   "nsis": {
     "oneClick": false,
@@ -48,7 +48,7 @@
       }
     ],
     "category": "public.app-category.developer-tools",
-    "icon": "public/icon.png"
+    "icon": "public/brand/livepad-icon-512.png"
   },
   "dmg": {
     "contents": [
@@ -80,6 +80,6 @@
       }
     ],
     "category": "Development",
-    "icon": "public/icon.png"
+    "icon": "public/brand/livepad-icon-512.png"
   }
 }

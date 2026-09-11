@@ -53,3 +53,20 @@ The next Phase 3 increments should:
 4. remove duplicated workspace-role/category state
 5. make persistence effects subscribe to application state instead of directly coupling UI
    concerns to Firestore
+
+
+## Phase 3 performance pass
+- PWA lifecycle/install state extracted into `src/hooks/usePWA.ts`; PWA remains enabled and is not removed.
+- Save-time clock moved into a small `SaveTimeLabel` component so the 1-second timer no longer rerenders the entire 8k-line `App`.
+- Editor statistics (plain text, characters, lines, words) are memoized.
+- Active note/content/attachments and typing-user projections are memoized.
+- Local note IndexedDB/localStorage persistence is coalesced during typing instead of serializing/writing on every keystroke; UI state remains immediate.
+- `handleUpdateContent` is memoized to reduce downstream hook/effect churn.
+- No existing product capability was intentionally removed.
+
+
+## Feature-preservation rule
+No product capability was intentionally deleted in this phase. In particular, PWA install,
+service-worker update prompts, offline readiness, PWA caching, Electron support, collaboration,
+editor modes, exports, AI, and coding features remain in the application. The work focuses on
+state ownership, render isolation, and persistence cost.

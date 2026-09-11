@@ -15,7 +15,7 @@ export default function IntroScreen({ onComplete }: IntroScreenProps) {
 
   // Fallback scheduling if video fails or is delayed
   useEffect(() => {
-    // If video hasn't loaded in 1000ms, fall back to our beautiful animated SVG recreation
+    // If video hasn't loaded in 1000ms, fall back to the official supplied LivePad brand artwork
     const timeout = setTimeout(() => {
       if (isLoadingVideo) {
         setUseVideo(false);
@@ -129,7 +129,7 @@ export default function IntroScreen({ onComplete }: IntroScreenProps) {
           </motion.div>
         ) : (
           /* =========================================================================
-             2. HIGH-FIDELITY INTERACTIVE SVG/CSS RECREATION FALLBACK
+             2. OFFICIAL LIVEPAD BRAND FALLBACK
              ========================================================================= */
           <motion.div
             key="fallback-track"
@@ -171,95 +171,16 @@ export default function IntroScreen({ onComplete }: IntroScreenProps) {
               transition={{ delay: 0.1, duration: 0.8, ease: 'easeOut' }}
               className="relative z-10 flex flex-col items-center justify-center text-center px-6"
             >
-              {/* Circular Emblem Container */}
-              <div className="relative w-44 h-44 mb-6 rounded-full bg-slate-50/60 border border-slate-100/80 shadow-inner flex items-center justify-center overflow-hidden">
-                <div className="absolute inset-1 rounded-full bg-gradient-to-tr from-slate-100/40 via-white to-white" />
-                
-                {/* Custom Stylized SVG drawing the exact LivePad Notebook Logo */}
-                <svg
-                  width="130"
-                  height="130"
-                  viewBox="0 0 200 200"
-                  fill="none"
-                  className="relative z-10"
-                >
-                  {/* Notepad tapered container with rounded corners and thick stroke */}
-                  <motion.path
-                    initial={{ pathLength: 0 }}
-                    animate={{ pathLength: 1 }}
-                    transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-                    d="M 94,54 L 126,54 C 131,54 134,57 134,62 L 134,130 C 134,135 130,138 125,138 L 85,138 C 80,138 76,135 77,130 L 88,62 C 89,57 91,54 94,54 Z"
-                    fill="none"
-                    stroke="#1e293b"
-                    strokeWidth="11"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-
-                  {/* Three Binder Rings at the top */}
-                  <motion.path
-                    initial={{ scaleY: 0, originY: 1 }}
-                    animate={{ scaleY: 1 }}
-                    transition={{ delay: 0.6, duration: 0.5, type: 'spring', stiffness: 200 }}
-                    d="M 98,40 L 98,54 M 110,40 L 110,54 M 122,40 L 122,54"
-                    stroke="#1e293b"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                  />
-
-                  {/* The flowing royal blue ribbon loop */}
-                  <motion.path
-                    initial={{ pathLength: 0 }}
-                    animate={{ pathLength: 1 }}
-                    transition={{ delay: 0.8, duration: 1.4, ease: 'easeInOut' }}
-                    d="M 64,103 C 58,118 84,122 93,115 C 104,107 125,83 112,71 C 97,58 84,89 80,111 C 76,131 92,139 105,129 C 118,118 135,93 151,80"
-                    stroke="#0084ff"
-                    strokeWidth="11"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                    className="drop-shadow-[0_2px_4px_rgba(0,132,255,0.25)]"
-                  />
-
-                  {/* Connected Arrowhead pointing up-right */}
-                  <motion.path
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 1.8, type: 'spring', stiffness: 200, damping: 10 }}
-                    d="M 134,86 L 152,73 L 150,96 L 144,90 Z"
-                    fill="#0084ff"
-                    stroke="#0084ff"
-                    strokeWidth="3"
-                    strokeLinejoin="round"
-                    style={{ originX: '144px', originY: '90px' }}
-                  />
-                </svg>
-              </div>
-
-              {/* Bold Minimal Wordmark */}
-              <div className="overflow-hidden mb-1.5">
-                <motion.h1
-                  initial={{ y: 35, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 1.1, type: 'spring', stiffness: 100, damping: 15 }}
-                  className="text-3xl md:text-4xl font-black tracking-[-0.04em] font-sans flex items-center justify-center uppercase"
-                >
-                  <span className="text-[#0084ff]">Live</span>
-                  <span className="text-slate-800 font-bold">Pad</span>
-                </motion.h1>
-              </div>
-
-              {/* Tagline representation from video */}
-              <div className="overflow-hidden">
-                <motion.p
-                  initial={{ y: 15, opacity: 0 }}
-                  animate={{ y: 0, opacity: 0.75 }}
-                  transition={{ delay: 1.4, duration: 0.6 }}
-                  className="text-[10px] md:text-xs font-semibold text-slate-500 uppercase tracking-[0.25em]"
-                >
-                  Real-time Notes, Seamlessly
-                </motion.p>
-              </div>
+              {/* Official LivePad brand artwork supplied by the product owner */}
+              <motion.img
+                src="/brand/livepad-lockup.png"
+                alt="LivePad — Real-time Notes, Seamlessly"
+                draggable={false}
+                initial={{ scale: 0.94, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.15, duration: 0.8, ease: 'easeOut' }}
+                className="relative z-10 w-[min(88vw,520px)] h-auto object-contain"
+              />
             </motion.div>
           </motion.div>
         )}

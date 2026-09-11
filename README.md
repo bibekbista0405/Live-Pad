@@ -106,3 +106,29 @@ npm install
 ### Development server note
 
 If the browser previously showed `HTTP 429` for Vite module requests, use this updated build. The API rate limiter is scoped to `/api/*`; Vite assets/modules are no longer rate-limited during development.
+
+## Architecture status
+
+- Phase 0 — Architecture Audit & Baseline: **Complete**
+- Phase 1 — Foundation & Security: **Complete**
+- Phase 2 — Core Data Architecture: **Complete (implementation baseline)**
+- Phase 3 — Application & State Architecture: **Next**
+
+Phase 2 introduces the canonical `workspaces/{workspaceId}` data hierarchy and
+repository boundary while preserving the legacy `rooms/{roomId}` tree for safe,
+non-destructive migration. See `docs/PHASE2_CORE_DATA_ARCHITECTURE.md`.
+
+
+## Current architecture status
+
+- Phase 0 — Architecture Audit & Baseline: complete
+- Phase 1 — Foundation & Security: complete
+- Phase 2 — Core Data Architecture: complete
+- Phase 3 — Application & State Architecture: in progress
+- Official LivePad branding is sourced from `public/brand/` and replaces the previous generated SVG/placeholder app icon assets.
+
+See `docs/PHASE3_APPLICATION_STATE.md` for the current Phase 3 boundary and migration plan.
+
+
+### Phase 3 — Application/state + performance
+PWA support remains enabled. Its lifecycle is isolated in `src/hooks/usePWA.ts`. The application also uses memoized editor projections and coalesced local persistence to reduce typing lag without removing features.

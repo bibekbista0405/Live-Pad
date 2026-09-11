@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, FormEvent, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, FormEvent, lazy, Suspense } from 'react';
 import { Platform, Logger, SessionRestoreManager } from './platform';
 import { useDictationEngine } from './hooks/useDictationEngine';
 import { DictationToolbar } from './components/dictation/DictationToolbar';
@@ -118,7 +118,6 @@ import { InspectorPanel } from './components/InspectorPanel';
 import { ChatPanel, FloatingChatTrigger } from './components/collaboration/ChatPanel';
 import { exportToTxt, exportToPdf, exportToDocx, exportToHtml, exportToMarkdown, exportToEpub, printDocument, convertHtmlToMarkdown } from './utils/exporters';
 import { CODE_SNIPPETS, CodeSnippet } from './utils/snippets';
-import { registerSW } from 'virtual:pwa-register';
 import RichTextEditor from './components/RichTextEditor';
 import MarkdownPreviewPanel from './components/MarkdownPreviewPanel';
 import { WorkspaceCategory, canPerformAction, GlobalSystemRole } from './utils/workspaceCategories';
@@ -133,6 +132,8 @@ import { useOfflineSync } from './hooks/useOfflineSync';
 import { OfflineBanner } from './components/desktop/OfflineBanner';
 import { initOfflineDB, putOfflineItem, enqueueOfflineOp, dequeueOfflineOp } from './utils/offlineDB';
 import { DocumentConflict } from './types';
+import { useAppUI } from './state/AppUIContext';
+import { usePWA } from './hooks/usePWA';
 
 // Lazy-loaded heavy components for accelerated app startup & code splitting
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal'));
@@ -502,6 +503,25 @@ const getFoldedDisplayState = (originalContent: string, foldedBlockIds: string[]
   };
 };
 
+const SaveTimeLabel = ({ lastSavedTime }: { lastSavedTime: number | null }) => {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  if (!lastSavedTime) return <>Saved just now</>;
+  const seconds = Math.max(0, Math.floor((now - lastSavedTime) / 1000));
+  if (seconds < 1) return <>Saved just now</>;
+  if (seconds < 60) return <>Saved {seconds}s ago</>;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return <>Saved {minutes}m {remainingSeconds}s ago</>;
+  const hours = Math.floor(minutes / 60);
+  return <>Saved {hours}h {minutes % 60}m ago</>;
+};
+
 export default function App() {
   // Adaptive Workspace Layout Manager
   const layout = useWorkspaceLayout();
@@ -512,89 +532,6 @@ export default function App() {
 
   // Active Tiptap Editor Instance
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
-
-  // ========== PWA AUTOMATIC UPDATE AND OFFLINE CACHE STATUS REGISTRY ==========
-  const [needRefresh, setNeedRefresh] = useState<boolean>(false);
-  const [offlineReady, setOfflineReady] = useState<boolean>(false);
-  const updateSWRef = useRef<((reloadPage?: boolean) => Promise<void>) | null>(null);
-
-  useEffect(() => {
-    try {
-      const updateSW = registerSW({
-        onNeedRefresh() {
-          setNeedRefresh(true);
-        },
-        onOfflineReady() {
-          setOfflineReady(true);
-        },
-        onRegistered(r) {
-          console.log('LivePad PWA Service Worker Registered:', r);
-        },
-        onRegisterError(error) {
-          console.error('LivePad PWA SW Registration Error:', error);
-        }
-      });
-      updateSWRef.current = updateSW;
-    } catch (e) {
-      console.warn('PWA registerSW registration notice:', e);
-    }
-  }, []);
-
-  const updateServiceWorker = async (reloadPage?: boolean) => {
-    if (updateSWRef.current) {
-      await updateSWRef.current(reloadPage);
-    }
-  };
-
-  // ========== PWA INSTALLATION EVENT REGISTER ==========
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstallable, setIsInstallable] = useState<boolean>(false);
-  const [isAppInstalled, setIsAppInstalled] = useState<boolean>(() => {
-    return window.matchMedia('(display-mode: standalone)').matches || 
-           (window.navigator as any).standalone === true;
-  });
-
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setIsInstallable(true);
-    };
-
-    const handleAppInstalled = () => {
-      setIsAppInstalled(true);
-      setIsInstallable(false);
-      setDeferredPrompt(null);
-      addToast('success', 'Thank you for installing LivePad!');
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    const mediaQuery = window.matchMedia('(display-mode: standalone)');
-    const handleDisplayModeChange = (e: MediaQueryListEvent) => {
-      setIsAppInstalled(e.matches);
-    };
-    mediaQuery.addEventListener('change', handleDisplayModeChange);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-      mediaQuery.removeEventListener('change', handleDisplayModeChange);
-    };
-  }, []);
-
-  const handleInstallApp = async () => {
-    if (!deferredPrompt) {
-      addToast('info', 'Installation helper is initializing...');
-      return;
-    }
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`PWA install prompt choice: ${outcome}`);
-    setDeferredPrompt(null);
-    setIsInstallable(false);
-  };
 
   const [showIntro, setShowIntro] = useState<boolean>(true);
   const { isDesktopApp, desktopTab, setDesktopTab } = useDesktopApp();
@@ -617,7 +554,7 @@ export default function App() {
   const [isCreateWizardOpen, setIsCreateWizardOpen] = useState<boolean>(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState<boolean>(false);
   const [globalRole, setGlobalRole] = useState<GlobalSystemRole>('user');
-  const [workspaceCategory, setWorkspaceCategory] = useState<WorkspaceCategory>('team');
+
   const [foldedBlockIds, setFoldedBlockIds] = useState<string[]>([]);
   const [floatingMenuCoords, setFloatingMenuCoords] = useState<{ x: number; y: number } | null>(null);
   const [copiedMarkdown, setCopiedMarkdown] = useState<boolean>(false);
@@ -625,9 +562,7 @@ export default function App() {
     return localStorage.getItem('livepad_username') || '';
   });
   const [nameInput, setNameInput] = useState<string>(userName);
-  const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('livepad_theme') as Theme) || 'light';
-  });
+  const { theme, setTheme, workspaceCategory, setWorkspaceCategory, notepadViewMode, setNotepadViewMode, sidebarOpen, setSidebarOpen, leftSidebarOpen, setLeftSidebarOpen, isCodeMode, setIsCodeMode, isFullscreen, setIsFullscreen, commandPaletteOpen, setCommandPaletteOpen, searchOpen, setSearchOpen, searchQuery, setSearchQuery, activeMatchIndex, setActiveMatchIndex } = useAppUI();
 
   // Global Toast Notifications Registry
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -659,6 +594,19 @@ export default function App() {
     },
     []
   );
+
+  // PWA lifecycle is isolated from the main application render tree.
+  // PWA is intentionally retained; this hook only removes its boot-time state
+  // and event listeners from the 8k-line App component.
+  const {
+    needRefresh,
+    offlineReady,
+    isInstallable,
+    isAppInstalled,
+    handleInstallApp,
+    updateServiceWorker,
+    dismissUpdate,
+  } = usePWA(addToast);
 
   const [conflictModalData, setConflictModalData] = useState<DocumentConflict | null>(null);
 
@@ -849,7 +797,7 @@ export default function App() {
   };
 
   // Toggle for Landing Page Personal Notepad section ('active' | 'workspaces' | 'trash')
-  const [notepadViewMode, setNotepadViewMode] = useState<'active' | 'workspaces' | 'trash'>('active');
+
 
   // Auto-purge expired trashed notes (>30 days) on load & when trashedNotes updates
   useEffect(() => {
@@ -1730,8 +1678,8 @@ export default function App() {
       return 16;
     }
   });
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState<boolean>(() => window.innerWidth >= 1024);
+
+
   const [leftSidebarSearchQuery, setLeftSidebarSearchQuery] = useState<string>('');
   const [sidebarCategoryFilter, setSidebarCategoryFilter] = useState<'all' | 'notes' | 'workspaces' | 'pinned' | 'trash'>('all');
   const [sidebarSortBy, setSidebarSortBy] = useState<'updated' | 'title' | 'created'>('updated');
@@ -1781,13 +1729,12 @@ export default function App() {
 
   const [isStructureOpen, setIsStructureOpen] = useState<boolean>(true);
   const [structureModeOverride, setStructureModeOverride] = useState<'default' | 'paragraphs' | 'sections'>('default');
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
   const [isReadOnly, setIsReadOnly] = useState<boolean>(false);
   const [softWrap, setSoftWrap] = useState<boolean>(() => {
     return localStorage.getItem('livepad_soft_wrap') !== 'false';
   });
   const [lastSavedTime, setLastSavedTime] = useState<number | null>(null);
-  const [now, setNow] = useState<number>(Date.now());
 
   const [isMobile, setIsMobile] = useState<boolean>(false);
 
@@ -1817,7 +1764,7 @@ export default function App() {
   }, []);
 
   // Code Playground / Code Editor Modes and States
-  const [isCodeMode, setIsCodeMode] = useState<boolean>(false);
+
 
   const handleSaveNote = (id: string, title: string, content: string) => {
     const updated = localNotes.map((n) => (n.id === id ? { ...n, title, content, updatedAt: Date.now() } : n));
@@ -1926,10 +1873,10 @@ export default function App() {
   }, [roomCode, activeLocalNoteId, theme, layout.leftMode, layout.rightOpen, isCodeMode]);
 
   // Search / Universal Command Palette States & Refs
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState<boolean>(false);
-  const [searchOpen, setSearchOpen] = useState<boolean>(false);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [activeMatchIndex, setActiveMatchIndex] = useState<number>(0);
+
+
+
+
   const [matches, setMatches] = useState<number[]>([]);
 
   // Code Playground / Code Editor Modes and States
@@ -2686,89 +2633,149 @@ export default function App() {
     addToast('info', 'Disconnected session. Returned to Dashboard.');
   };
 
-  const activeLocalNote = localNotes.find(n => n.id === activeLocalNoteId);
+  const activeLocalNote = useMemo(
+    () => localNotes.find(n => n.id === activeLocalNoteId),
+    [localNotes, activeLocalNoteId]
+  );
 
   // If in notepad mode, override room and content values:
-  const editorContent = activeLocalNoteId ? (activeLocalNote?.content ?? '') : (room?.content ?? '');
+  const editorContent = useMemo(
+    () => activeLocalNoteId ? (activeLocalNote?.content ?? '') : (room?.content ?? ''),
+    [activeLocalNoteId, activeLocalNote?.content, room?.content]
+  );
 
-  const activeAttachments = (roomCode ? room?.attachments : activeLocalNote?.attachments) || [];
+  const activeAttachments = useMemo(
+    () => (roomCode ? room?.attachments : activeLocalNote?.attachments) || [],
+    [roomCode, room?.attachments, activeLocalNote?.attachments]
+  );
 
   const [localSavingState, setLocalSavingState] = useState<SyncStatus>('synced');
-  const localSaveTimeoutRef = useRef<any>(null);
+  const localSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingLocalPersistenceRef = useRef<{
+    id: string;
+    title: string;
+    content: string;
+    createdAt?: number;
+    updatedAt: number;
+    attachments?: Attachment[];
+    workspaceId?: string;
+    roomCode?: string;
+  } | null>(null);
+  const localPersistenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Custom update content function (Local-first IndexedDB primary store + background sync queue to Firestore)
-  const handleUpdateContent = (newVal: string) => {
+  const flushLocalPersistence = useCallback(() => {
+    const pending = pendingLocalPersistenceRef.current;
+    if (!pending) return;
+    pendingLocalPersistenceRef.current = null;
+    void putOfflineItem('documents', pending).catch((err) => {
+      console.warn('[LivePad] IndexedDB persistence failed:', err);
+    });
+  }, []);
+
+  const scheduleLocalPersistence = useCallback((pending: NonNullable<typeof pendingLocalPersistenceRef.current>) => {
+    pendingLocalPersistenceRef.current = pending;
+    if (localPersistenceTimeoutRef.current) {
+      clearTimeout(localPersistenceTimeoutRef.current);
+    }
+    localPersistenceTimeoutRef.current = setTimeout(() => {
+      localPersistenceTimeoutRef.current = null;
+      flushLocalPersistence();
+    }, 400);
+  }, [flushLocalPersistence]);
+
+  useEffect(() => {
+    return () => {
+      if (localSaveTimeoutRef.current) clearTimeout(localSaveTimeoutRef.current);
+      if (localPersistenceTimeoutRef.current) clearTimeout(localPersistenceTimeoutRef.current);
+      flushLocalPersistence();
+    };
+  }, [flushLocalPersistence]);
+
+  // Custom update content function. UI state updates immediately, while expensive
+  // localStorage/IndexedDB persistence is coalesced so typing stays responsive.
+  const handleUpdateContent = useCallback((newVal: string) => {
+    const updatedAt = Date.now();
+
     if (activeLocalNoteId) {
       setLocalSavingState('saving');
-      let activeNoteObj: LocalNotepad | null = null;
-      const updated = localNotes.map(note => {
-        if (note.id === activeLocalNoteId) {
-          activeNoteObj = { ...note, content: newVal, updatedAt: Date.now() };
-          return activeNoteObj;
-        }
-        return note;
+      const activeNoteObj = localNotes.find((note) => note.id === activeLocalNoteId);
+      if (!activeNoteObj) return;
+
+      const updatedNote: LocalNotepad = {
+        ...activeNoteObj,
+        content: newVal,
+        updatedAt,
+      };
+      setLocalNotes((prev) => prev.map((note) => note.id === activeLocalNoteId ? updatedNote : note));
+      setLastSavedTime(updatedAt);
+
+      scheduleLocalPersistence({
+        id: updatedNote.id,
+        title: updatedNote.title,
+        content: newVal,
+        createdAt: updatedNote.createdAt,
+        updatedAt,
+        attachments: updatedNote.attachments || [],
       });
-      setLocalNotes(updated);
-      localStorage.setItem('livepad_local_notepads', JSON.stringify(updated));
-      setLastSavedTime(Date.now());
 
-      // Local-first update to IndexedDB primary store immediately
-      if (activeNoteObj) {
-        putOfflineItem('documents', {
-          id: (activeNoteObj as LocalNotepad).id,
-          title: (activeNoteObj as LocalNotepad).title,
-          content: newVal,
-          createdAt: (activeNoteObj as LocalNotepad).createdAt,
-          updatedAt: (activeNoteObj as LocalNotepad).updatedAt,
-          attachments: (activeNoteObj as LocalNotepad).attachments || [],
-        }).catch(err => {
-          console.warn('[handleUpdateContent] IndexedDB write failed for local note:', err);
-        });
-      }
-
+      // localStorage is also coalesced with the same 400ms write window.
       if (localSaveTimeoutRef.current) clearTimeout(localSaveTimeoutRef.current);
       localSaveTimeoutRef.current = setTimeout(() => {
-        setLocalSavingState('synced');
-      }, 600);
-    } else {
-      // Room / Workspace Document
-      if (roomCode) {
-        const docId = roomCode;
-        const currentTitle = room?.title || room?.workspaceName || `Workspace #${roomCode}`;
-
-        // 1. Local-first immediate write to IndexedDB primary store
-        putOfflineItem('documents', {
-          id: docId,
-          title: currentTitle,
-          content: newVal,
-          updatedAt: Date.now(),
-          workspaceId: room?.workspaceId || roomCode,
-          roomCode: roomCode,
-        }).catch(err => {
-          console.warn('[handleUpdateContent] IndexedDB write failed for room:', err);
+        localSaveTimeoutRef.current = null;
+        setLocalNotes((current) => {
+          try {
+            localStorage.setItem('livepad_local_notepads', JSON.stringify(current));
+          } catch (err) {
+            console.warn('[LivePad] localStorage persistence failed:', err);
+          }
+          return current;
         });
-
-        // 2. Queue for background sync if device is offline
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-          enqueueOfflineOp({
-            type: 'UPDATE',
-            entity: 'rooms',
-            entityId: roomCode,
-            payload: {
-              content: newVal,
-              updatedAt: Date.now(),
-              lastUpdatedBy: userName,
-            },
-          }).catch(err => {
-            console.warn('[handleUpdateContent] Sync queue enqueue failed:', err);
-          });
-        }
-      }
-
-      // 3. Trigger background synchronization to Firestore / BroadcastChannel
-      updateContent(newVal);
+      }, 400);
+      return;
     }
-  };
+
+    // Room / Workspace Document
+    if (roomCode) {
+      const currentTitle = room?.title || room?.workspaceName || `Workspace #${roomCode}`;
+      scheduleLocalPersistence({
+        id: roomCode,
+        title: currentTitle,
+        content: newVal,
+        updatedAt,
+        workspaceId: room?.workspaceId || roomCode,
+        roomCode,
+      });
+
+      // Queue only while offline. Online changes continue through useLiveRoom's
+      // debounced realtime synchronization path below.
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        enqueueOfflineOp({
+          type: 'UPDATE',
+          entity: 'rooms',
+          entityId: roomCode,
+          payload: {
+            content: newVal,
+            updatedAt,
+            lastUpdatedBy: userName,
+          },
+        }).catch(err => {
+          console.warn('[handleUpdateContent] Sync queue enqueue failed:', err);
+        });
+      }
+    }
+
+    updateContent(newVal);
+  }, [
+    activeLocalNoteId,
+    localNotes,
+    roomCode,
+    room?.title,
+    room?.workspaceName,
+    room?.workspaceId,
+    scheduleLocalPersistence,
+    updateContent,
+    userName,
+  ]);
 
   const {
     dictationState,
@@ -3219,13 +3226,6 @@ export default function App() {
   }, [room?.updatedAt]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
     if (prevSyncStatusRef.current === 'saving' && syncStatus === 'synced') {
       setShowSyncSuccess(true);
       setLastSavedTime(Date.now());
@@ -3260,28 +3260,17 @@ export default function App() {
   }, []);
 
   const contentValue = editorContent;
-  const plainTextContent = contentValue ? contentValue.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '';
-  const charCount = plainTextContent.length;
-  const lineCount = contentValue ? contentValue.split(/<br\s*\/?>|<\/p>|\n/).filter(Boolean).length || 1 : 1;
-  const wordCount = (() => {
-    if (!plainTextContent) return 0;
-    return plainTextContent.split(/\s+/).filter(Boolean).length;
-  })();
+  const { plainTextContent, charCount, lineCount, wordCount } = useMemo(() => {
+    const plain = contentValue ? contentValue.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    return {
+      plainTextContent: plain,
+      charCount: plain.length,
+      lineCount: contentValue ? contentValue.split(/<br\s*\/?>|<\/p>|\n/).filter(Boolean).length || 1 : 1,
+      wordCount: plain ? plain.split(/\s+/).filter(Boolean).length : 0,
+    };
+  }, [contentValue]);
 
-  const formatTimeElapsed = () => {
-    if (!lastSavedTime) return 'Saved just now';
-    const seconds = Math.floor((now - lastSavedTime) / 1000);
-    if (seconds < 1) return 'Saved just now';
-    if (seconds < 60) return `Saved ${seconds}s ago`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes < 60) {
-      return `Saved ${minutes}m ${remainingSeconds}s ago`;
-    }
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return `Saved ${hours}h ${remainingMinutes}m ago`;
-  };
+
 
   // Sync scroll on open or layout shift
   useEffect(() => {
@@ -3291,12 +3280,12 @@ export default function App() {
   }, [searchOpen, editorContent]);
 
   // Real database users currently typing (excluding self)
-  const typingUserNames = Object.entries(room?.typingUsers || {})
+  const typingUserNames = useMemo(() => Object.entries(room?.typingUsers || {})
     .filter(([userId, isTyping]) => isTyping && userId !== uid)
     .map(([userId]) => {
       const u = room?.users?.[userId];
       return u?.name || 'Someone';
-    });
+    }), [room?.typingUsers, room?.users, uid]);
 
   const getCreatedTimeStr = () => {
     if (!room?.createdAt) return 'Now';
@@ -4198,7 +4187,7 @@ console.warn("Verify your variables before deployment!");
             <div className="flex items-center justify-end gap-2.5 border-t border-slate-800/80 pt-3">
               <button
                 type="button"
-                onClick={() => setNeedRefresh(false)}
+                onClick={dismissUpdate}
                 className="cursor-pointer px-3 py-1.5 rounded-lg text-[11px] font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
               >
                 Dismiss
@@ -7680,7 +7669,7 @@ console.warn("Verify your variables before deployment!");
                         </div>
                         
                         <span className={`font-mono text-[10px] font-bold ${isReadOnly ? 'text-amber-900/60 dark:text-stone-400' : 'text-slate-500 dark:text-zinc-400'}`}>
-                          {formatTimeElapsed()}
+                          <SaveTimeLabel lastSavedTime={lastSavedTime} />
                         </span>
                       </div>
                     </div>

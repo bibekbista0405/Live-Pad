@@ -15,7 +15,7 @@ export default defineConfig(() => {
         devOptions: {
           enabled: false,
         },
-        includeAssets: ['icon-192.png', 'icon-512.png', 'favicon.ico', 'robots.txt'],
+        includeAssets: ['brand/livepad-icon-192.png', 'brand/livepad-icon-512.png', 'brand/livepad-favicon.ico', 'brand/livepad-lockup.png', 'brand/livepad-lockup.png', 'robots.txt'],
         manifest: {
           name: 'LivePad - Real-Time Collaborative Workspace',
           short_name: 'LivePad',
@@ -30,25 +30,25 @@ export default defineConfig(() => {
           categories: ['productivity', 'utilities', 'developer'],
           icons: [
             {
-              src: '/icon-192.png',
+              src: '/brand/livepad-icon-192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any'
             },
             {
-              src: '/icon-192.png',
+              src: '/brand/livepad-icon-192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'maskable'
             },
             {
-              src: '/icon-512.png',
+              src: '/brand/livepad-icon-512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any'
             },
             {
-              src: '/icon-512.png',
+              src: '/brand/livepad-icon-512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable'
@@ -60,14 +60,14 @@ export default defineConfig(() => {
               short_name: 'New Room',
               description: 'Create a new real-time collaborative workspace',
               url: '/?action=new',
-              icons: [{ src: '/icon-192.png', sizes: '192x192' }]
+              icons: [{ src: '/brand/livepad-icon-192.png', sizes: '192x192' }]
             },
             {
               name: 'Quick Scratchpad',
               short_name: 'Scratchpad',
               description: 'Open instant local notepad',
               url: '/?action=scratchpad',
-              icons: [{ src: '/icon-192.png', sizes: '192x192' }]
+              icons: [{ src: '/brand/livepad-icon-192.png', sizes: '192x192' }]
             }
           ]
         },

@@ -94,7 +94,8 @@ service cloud.firestore {
         && request.resource.data.participants.keys().hasAll([request.resource.data.ownerId])
         && request.resource.data.participants[request.resource.data.ownerId].role == 'owner'
         && request.resource.data.participants.keys().hasAll([request.auth.uid])
-        && request.resource.data.participants[request.auth.uid].role == 'editor';
+        && request.resource.data.participants[request.auth.uid].role == 'admin'
+        && request.resource.data.ownerId != request.auth.uid;
     }
 
     function canEditByRoomId(roomId) {
@@ -360,14 +361,160 @@ service cloud.firestore {
     }
 
     // ----------------------------- Workspaces --------------------------------
-    // This collection is kept as a reference/index layer. Membership is still
-    // authoritative in rooms/{roomId} during Phase 1.
+    // Phase 2 canonical model. Membership is authoritative in
+    // workspaces/{workspaceId}/members/{uid}. The legacy rooms tree remains
+    // supported above for compatibility during migration.
     match /workspaces/{workspaceId} {
-      allow get: if signedIn() && validId(workspaceId);
+      function workspaceExists() {
+        return exists(/databases/$(database)/documents/workspaces/$(workspaceId));
+      }
+
+      function workspaceData() {
+        return get(/databases/$(database)/documents/workspaces/$(workspaceId)).data;
+      }
+
+      function isWorkspaceMember() {
+        return signedIn() && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+      }
+
+      function workspaceRole() {
+        return isWorkspaceMember()
+          ? get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.role
+          : null;
+      }
+
+      function isWorkspaceOwner() {
+        return signedIn() && workspaceExists() && workspaceData().ownerId == request.auth.uid;
+      }
+
+      function canWorkspaceEdit() {
+        return isWorkspaceMember() && workspaceRole() in ['owner', 'admin', 'editor'];
+      }
+
+      function canWorkspaceComment() {
+        return isWorkspaceMember() && workspaceRole() in ['owner', 'admin', 'editor', 'commenter'];
+      }
+
+      allow get: if signedIn() && (resource.data.privacy == 'public' || isWorkspaceMember());
       allow list: if false;
-      allow create: if signedIn() && validId(workspaceId);
-      allow update: if signedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 256
+        && request.resource.data.privacy in ['public', 'private', 'invite-only']
+        && request.resource.data.lifecycle == 'active';
+      allow update: if isWorkspaceOwner()
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'description', 'privacy', 'lifecycle', 'participantLimit', 'category', 'type', 'updatedAt'
+        ]);
       allow delete: if false;
+
+      match /members/{uid} {
+        allow get: if isWorkspaceMember();
+        allow list: if isWorkspaceMember();
+        allow create: if isWorkspaceOwner()
+          && uid == request.resource.data.uid
+          && request.resource.data.role in ['owner','admin','editor','commenter','viewer','guest'];
+        allow update: if isWorkspaceOwner()
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.role in ['owner','admin','editor','commenter','viewer','guest'];
+        allow delete: if isWorkspaceOwner() && uid != request.auth.uid;
+      }
+
+      match /presence/{uid} {
+        allow get, list: if isWorkspaceMember();
+        allow create, update: if isWorkspaceMember()
+          && uid == request.auth.uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.status in ['online','away','reconnecting','offline']
+          && request.resource.data.lastActive is number;
+        allow delete: if signedIn() && uid == request.auth.uid;
+      }
+
+      match /documents/{documentId} {
+        allow get, list: if isWorkspaceMember();
+        allow create: if canWorkspaceEdit()
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.content is string
+          && request.resource.data.content.size() <= 1048576
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.updatedBy == request.auth.uid;
+        allow update: if canWorkspaceEdit()
+          && request.resource.data.workspaceId == resource.data.workspaceId
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.content is string
+          && request.resource.data.content.size() <= 1048576
+          && request.resource.data.updatedBy == request.auth.uid;
+        allow delete: if isWorkspaceOwner() || workspaceRole() == 'admin';
+      }
+
+      match /messages/{messageId} {
+        allow get, list: if isWorkspaceMember();
+        allow create: if canWorkspaceComment()
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 20000;
+        allow update: if canWorkspaceComment() && resource.data.senderUid == request.auth.uid;
+        allow delete: if resource.data.senderUid == request.auth.uid || isWorkspaceOwner() || workspaceRole() == 'admin';
+      }
+
+      match /comments/{commentId} {
+        allow get, list: if isWorkspaceMember();
+        allow create: if canWorkspaceComment()
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 20000;
+        allow update: if canWorkspaceComment() && resource.data.authorUid == request.auth.uid;
+        allow delete: if resource.data.authorUid == request.auth.uid || isWorkspaceOwner() || workspaceRole() == 'admin';
+      }
+
+      match /attachments/{attachmentId} {
+        allow get, list: if isWorkspaceMember();
+        allow create: if canWorkspaceEdit()
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.uploadedBy == request.auth.uid
+          && request.resource.data.name is string
+          && request.resource.data.name.size() <= 256
+          && request.resource.data.url is string
+          && request.resource.data.url.size() <= 4096
+          && request.resource.data.sizeBytes is number
+          && request.resource.data.sizeBytes <= 10485760;
+        allow update: if canWorkspaceEdit() && resource.data.uploadedBy == request.auth.uid;
+        allow delete: if resource.data.uploadedBy == request.auth.uid || isWorkspaceOwner() || workspaceRole() == 'admin';
+      }
+
+      match /projects/{projectId} {
+        allow get, list: if isWorkspaceMember();
+        allow create, update: if canWorkspaceEdit()
+          && request.resource.data.workspaceId == workspaceId;
+        allow delete: if isWorkspaceOwner() || workspaceRole() == 'admin';
+      }
+
+      match /history/{historyId} {
+        allow get, list: if isWorkspaceMember();
+        allow create: if canWorkspaceEdit()
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.content is string
+          && request.resource.data.content.size() <= 1048576;
+        allow update, delete: if false;
+      }
+
+      match /audit/{auditId} {
+        allow get, list: if isWorkspaceOwner() || workspaceRole() == 'admin';
+        allow create: if (isWorkspaceOwner() || workspaceRole() == 'admin')
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.action is string;
+        allow update, delete: if false;
+      }
     }
 
     // ------------------------------- Users ----------------------------------

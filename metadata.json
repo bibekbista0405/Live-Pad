@@ -1,0 +1,10 @@
+{
+  "name": "LivePad",
+  "description": "A real-time collaborative online notepad with instant sync, presence indicators, anonymous auth, and document export features.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

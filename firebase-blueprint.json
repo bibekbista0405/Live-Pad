@@ -1,0 +1,245 @@
+{
+  "entities": {
+    "Room": {
+      "title": "Room",
+      "description": "A collaborative workspace room containing note content, role-based participant permissions, real ownership metadata, and active presence.",
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string",
+          "description": "Unique identifier of the workspace room."
+        },
+        "roomCode": {
+          "type": "string",
+          "description": "Human readable unique room code (e.g. LP-7XK9-MQ2P)."
+        },
+        "workspaceType": {
+          "type": "string",
+          "enum": ["teaching", "study", "coding", "personal", "team"],
+          "description": "Category of workspace setting default permissions and participant roles."
+        },
+        "workspaceName": {
+          "type": "string",
+          "description": "Human-friendly display name of the workspace."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the registered Workspace Owner."
+        },
+        "ownerName": {
+          "type": "string",
+          "description": "Display name of the registered Workspace Owner."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID of the original workspace creator."
+        },
+        "creatorId": {
+          "type": "string",
+          "description": "UID of the user who created the workspace."
+        },
+        "workspaceRoleVersion": {
+          "type": "integer",
+          "description": "Version number for the RBAC permission engine (e.g., 2)."
+        },
+        "creatorRole": {
+          "type": "string",
+          "enum": ["owner", "teacher", "instructor", "admin"],
+          "description": "Assigned administrative role of the workspace creator."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "archived", "expired", "deleted"],
+          "description": "Lifecycle status of the workspace."
+        },
+        "privacy": {
+          "type": "string",
+          "enum": ["public", "private", "invite-only"],
+          "description": "Access privacy setting for joining."
+        },
+        "participantLimit": {
+          "type": "integer",
+          "description": "Maximum number of simultaneous participants allowed in the workspace."
+        },
+        "participants": {
+          "type": "object",
+          "description": "Map of user IDs to participant details including role, joinedAt, and status."
+        },
+        "permissions": {
+          "type": "object",
+          "description": "Workspace-wide capability toggles."
+        },
+        "content": {
+          "type": "string",
+          "description": "The text content of the live notepad."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The server timestamp when the room was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The server timestamp when content was last updated."
+        },
+        "users": {
+          "type": "object",
+          "description": "A map of user IDs to active user presence details (name, active, joinedAt)."
+        },
+        "typingUsers": {
+          "type": "object",
+          "description": "A map of user IDs to boolean or timestamp values indicating typing status."
+        },
+        "attachments": {
+          "type": "array",
+          "description": "A list of file/media attachments or web/shared links recorded in this room."
+        },
+        "label": {
+          "type": "string",
+          "description": "An optional label/category tag assigned to the notepad room."
+        },
+        "title": {
+          "type": "string",
+          "description": "Document title override for the notepad."
+        }
+      },
+      "required": ["content", "createdAt", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "An immutable audit log entry recording an administrative or permission action in the workspace.",
+      "type": "object",
+      "properties": {
+        "who": { "type": "string" },
+        "actorUid": { "type": "string" },
+        "actorName": { "type": "string" },
+        "action": { "type": "string" },
+        "target": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "integer" },
+        "device": { "type": "string" }
+      },
+      "required": ["actorUid", "action"]
+    },
+    "HistoryEntry": {
+      "title": "HistoryEntry",
+      "description": "An edit history entry mapping previous states of the room content.",
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string",
+          "description": "The historical note content at this specific entry."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when this entry was created."
+        },
+        "authorName": {
+          "type": "string",
+          "description": "The nickname of the editing author."
+        }
+      },
+      "required": ["content", "updatedAt", "authorName"]
+    },
+    "CodingProject": {
+      "title": "CodingProject",
+      "description": "A coding project inside a workspace.",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "workspaceId"]
+    },
+    "ProjectFolder": {
+      "title": "ProjectFolder",
+      "description": "A directory folder within a coding project.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "parentId": { "type": "string" },
+        "path": { "type": "string" },
+        "isExpanded": { "type": "boolean" }
+      },
+      "required": ["name"]
+    },
+    "ProjectFile": {
+      "title": "ProjectFile",
+      "description": "A code or asset file within a project.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "extension": { "type": "string" },
+        "language": { "type": "string" },
+        "path": { "type": "string" },
+        "parentId": { "type": "string" },
+        "content": { "type": "string" },
+        "version": { "type": "integer" }
+      },
+      "required": ["name", "content"]
+    },
+    "FileVersion": {
+      "title": "FileVersion",
+      "description": "Historical snapshot of a project file.",
+      "type": "object",
+      "properties": {
+        "fileId": { "type": "string" },
+        "versionNumber": { "type": "integer" },
+        "content": { "type": "string" },
+        "authorName": { "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "required": ["fileId", "content"]
+    },
+    "TrashedItem": {
+      "title": "TrashedItem",
+      "description": "A soft-deleted file or folder in project trash.",
+      "type": "object",
+      "properties": {
+        "itemType": { "type": "string" },
+        "deletedBy": { "type": "string" }
+      },
+      "required": ["itemType"]
+    }
+  },
+  "firestore": {
+    "rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Active workspace rooms with real-time text, role permissions, and status syncing."
+    },
+    "rooms/{roomId}/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Audit trail log entries for administrative workspace actions."
+    },
+    "rooms/{roomId}/history/{historyId}": {
+      "schema": "HistoryEntry",
+      "description": "The edit history snapshots for a room."
+    },
+    "rooms/{roomId}/projects/{projectId}": {
+      "schema": "CodingProject",
+      "description": "Coding projects in the workspace."
+    },
+    "rooms/{roomId}/projects/{projectId}/folders/{folderId}": {
+      "schema": "ProjectFolder",
+      "description": "Directory structure in a project."
+    },
+    "rooms/{roomId}/projects/{projectId}/files/{fileId}": {
+      "schema": "ProjectFile",
+      "description": "Code files in a project."
+    },
+    "rooms/{roomId}/projects/{projectId}/files/{fileId}/versions/{versionId}": {
+      "schema": "FileVersion",
+      "description": "Version history snapshots for a code file."
+    },
+    "rooms/{roomId}/projects/{projectId}/trash/{trashId}": {
+      "schema": "TrashedItem",
+      "description": "Recycle bin items for a project."
+    }
+  }
+}

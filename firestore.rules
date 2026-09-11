@@ -1,0 +1,388 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // LivePad Foundation Security Policy (Phase 1)
+    // -------------------------------------------------------------------------
+    // Design goals:
+    // 1. Authentication is mandatory for cloud access.
+    // 2. A room code is an identifier, never an authorization secret.
+    // 3. Membership/role is checked on the server (Firestore Rules).
+    // 4. Security-sensitive fields cannot be changed by normal members.
+    // 5. High-frequency presence is limited to the caller's own entry.
+    // 6. Client deletion of workspaces/history/audit records is blocked.
+    // 7. Collection enumeration is intentionally disabled.
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validId(value) {
+      return value is string && value.size() >= 1 && value.size() <= 256;
+    }
+
+    function validRoomId(roomId) {
+      return roomId is string
+        && roomId.size() >= 4
+        && roomId.size() <= 16
+        && roomId.matches('^[A-Za-z0-9_-]+$');
+    }
+
+    function roomRef(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId));
+    }
+
+    function roomExists(roomId) {
+      return exists(/databases/$(database)/documents/rooms/$(roomId));
+    }
+
+    function isMemberByRoomId(roomId) {
+      return signedIn()
+        && roomExists(roomId)
+        && roomRef(roomId).data.keys().hasAny(['participants'])
+        && roomRef(roomId).data.participants is map
+        && roomRef(roomId).data.participants.keys().hasAll([request.auth.uid]);
+    }
+
+    function isMemberData(data) {
+      return signedIn()
+        && data.keys().hasAny(['participants'])
+        && data.participants is map
+        && data.participants.keys().hasAll([request.auth.uid]);
+    }
+
+    function roleByRoomId(roomId) {
+      return isMemberByRoomId(roomId)
+        && roomRef(roomId).data.participants[request.auth.uid].keys().hasAny(['role'])
+        ? roomRef(roomId).data.participants[request.auth.uid].role
+        : null;
+    }
+
+    function isOwnerByRoomId(roomId) {
+      return signedIn()
+        && roomExists(roomId)
+        && roomRef(roomId).data.keys().hasAny(['ownerId'])
+        && roomRef(roomId).data.ownerId == request.auth.uid;
+    }
+
+    function isOwnerData(data) {
+      return signedIn() && data.keys().hasAny(['ownerId']) && data.ownerId == request.auth.uid;
+    }
+
+    function isAdminByRoomId(roomId) {
+      return isOwnerByRoomId(roomId) || (isMemberByRoomId(roomId) && roleByRoomId(roomId) == 'admin');
+    }
+
+    function isAdminData(data) {
+      return isOwnerData(data) || (isMemberData(data) && data.participants[request.auth.uid].role == 'admin');
+    }
+
+    function ownershipFieldsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'creatorId', 'creatorRole']);
+    }
+
+    function validOwnerTransfer() {
+      return isOwnerData(resource.data)
+        && request.resource.data.ownerId is string
+        && request.resource.data.creatorId == request.resource.data.ownerId
+        && request.resource.data.creatorRole == 'owner'
+        && request.resource.data.participants is map
+        && request.resource.data.participants.keys().hasAll([request.resource.data.ownerId])
+        && request.resource.data.participants[request.resource.data.ownerId].role == 'owner'
+        && request.resource.data.participants.keys().hasAll([request.auth.uid])
+        && request.resource.data.participants[request.auth.uid].role == 'editor';
+    }
+
+    function canEditByRoomId(roomId) {
+      return isMemberByRoomId(roomId) && (
+        roleByRoomId(roomId) == 'owner' ||
+        roleByRoomId(roomId) == 'admin' ||
+        roleByRoomId(roomId) == 'editor' ||
+        roleByRoomId(roomId) == 'collaborator' ||
+        roleByRoomId(roomId) == 'teacher' ||
+        roleByRoomId(roomId) == 'instructor' ||
+        roleByRoomId(roomId) == 'member' ||
+        roleByRoomId(roomId) == 'developer' ||
+        roleByRoomId(roomId) == 'student'
+      );
+    }
+
+    function canCommentByRoomId(roomId) {
+      return isMemberByRoomId(roomId) && (
+        canEditByRoomId(roomId) || roleByRoomId(roomId) == 'commenter' || roleByRoomId(roomId) == 'reviewer'
+      );
+    }
+
+    function validRoom(data) {
+      return data.keys().hasAll(['content', 'createdAt', 'updatedAt'])
+        && data.content is string
+        && data.content.size() <= 1048576
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!data.keys().hasAny(['roomCode']) || (data.roomCode is string && data.roomCode.size() >= 4 && data.roomCode.size() <= 16))
+        && (!data.keys().hasAny(['workspaceId']) || (data.workspaceId is string && data.workspaceId.size() <= 64))
+        && (!data.keys().hasAny(['workspaceName']) || (data.workspaceName is string && data.workspaceName.size() <= 256))
+        && (!data.keys().hasAny(['title']) || (data.title is string && data.title.size() <= 256))
+        && (!data.keys().hasAny(['label']) || (data.label is string && data.label.size() <= 256))
+        && (!data.keys().hasAny(['creatorId']) || (data.creatorId is string && data.creatorId.size() <= 128))
+        && (!data.keys().hasAny(['createdBy']) || (data.createdBy is string && data.createdBy.size() <= 128))
+        && (!data.keys().hasAny(['ownerId']) || (data.ownerId is string && data.ownerId.size() <= 128))
+        && (!data.keys().hasAny(['ownerName']) || (data.ownerName is string && data.ownerName.size() <= 128))
+        && (!data.keys().hasAny(['creatorRole']) || (data.creatorRole is string && data.creatorRole.size() <= 64))
+        && (!data.keys().hasAny(['workspaceRoleVersion']) || data.workspaceRoleVersion is number)
+        && (!data.keys().hasAny(['privacy']) || (data.privacy is string && data.privacy in ['public', 'private', 'invite-only']))
+        && (!data.keys().hasAny(['participantLimit']) || (data.participantLimit is number && data.participantLimit >= 1 && data.participantLimit <= 1000))
+        && (!data.keys().hasAny(['status']) || (data.status is string && data.status in ['active', 'archived', 'expired', 'deleted']))
+        && (!data.keys().hasAny(['participants']) || data.participants is map)
+        && (!data.keys().hasAny(['users']) || data.users is map)
+        && (!data.keys().hasAny(['typingUsers']) || data.typingUsers is map)
+        && (!data.keys().hasAny(['permissions']) || data.permissions is map)
+        && (!data.keys().hasAny(['expiresAt']) || data.expiresAt == null || data.expiresAt is number)
+        && (!data.keys().hasAny(['editingPolicy']) || (data.editingPolicy is string && data.editingPolicy.size() <= 64))
+        && (!data.keys().hasAny(['codeExecutionEnabled']) || data.codeExecutionEnabled is bool)
+        && (!data.keys().hasAny(['voiceChatEnabled']) || data.voiceChatEnabled is bool)
+        && (!data.keys().hasAny(['chatEnabled']) || data.chatEnabled is bool)
+        && (!data.keys().hasAny(['defaultRole']) || (data.defaultRole is string && data.defaultRole.size() <= 64))
+        && (!data.keys().hasAny(['attachments']) || (data.attachments is list && data.attachments.size() <= 100));
+    }
+
+    function selfPresenceOnly(existingData, incomingData) {
+      return incomingData.diff(existingData).affectedKeys().hasOnly(['users', 'typingUsers', 'participants'])
+        && (
+          !incomingData.keys().hasAny(['users']) ||
+          (
+            existingData.keys().hasAny(['users']) && existingData.users is map && incomingData.users is map
+            && incomingData.users.diff(existingData.users).affectedKeys().hasOnly([request.auth.uid])
+          )
+        )
+        && (
+          !incomingData.keys().hasAny(['typingUsers']) ||
+          (
+            existingData.keys().hasAny(['typingUsers']) && existingData.typingUsers is map && incomingData.typingUsers is map
+            && incomingData.typingUsers.diff(existingData.typingUsers).affectedKeys().hasOnly([request.auth.uid])
+          )
+        )
+        && (
+          !incomingData.keys().hasAny(['participants']) ||
+          (
+            existingData.keys().hasAny(['participants']) && existingData.participants is map && incomingData.participants is map
+            && incomingData.participants.diff(existingData.participants).affectedKeys().hasOnly([request.auth.uid])
+          )
+        )
+        && selfRoleUnchanged(existingData, incomingData);
+    }
+
+    function selfRoleUnchanged(existingData, incomingData) {
+      return !incomingData.keys().hasAny(['participants'])
+        || !incomingData.participants.keys().hasAll([request.auth.uid])
+        || !existingData.keys().hasAny(['participants'])
+        || !existingData.participants.keys().hasAll([request.auth.uid])
+        || incomingData.participants[request.auth.uid].role == existingData.participants[request.auth.uid].role;
+    }
+
+    function isPublicSelfJoin(roomId) {
+      return signedIn()
+        && resource.data.privacy == 'public'
+        && !isMemberData(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'users'])
+        && request.resource.data.participants is map
+        && request.resource.data.participants.keys().hasAll([request.auth.uid])
+        && request.resource.data.participants.diff(resource.data.participants).affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.participants[request.auth.uid].uid == request.auth.uid
+        && request.resource.data.participants[request.auth.uid].role == (
+          resource.data.keys().hasAny(['defaultRole']) ? resource.data.defaultRole : 'member'
+        )
+        && (
+          !request.resource.data.keys().hasAny(['users'])
+          || (
+            resource.data.keys().hasAny(['users'])
+            && request.resource.data.users is map
+            && request.resource.data.users.diff(resource.data.users).affectedKeys().hasOnly([request.auth.uid])
+          )
+        );
+    }
+
+    function validHistory(data) {
+      return data.keys().hasAll(['content', 'updatedAt', 'authorName'])
+        && data.keys().hasOnly(['content', 'updatedAt', 'authorName', 'authorUid'])
+        && data.content is string
+        && data.content.size() <= 1048576
+        && data.updatedAt is timestamp
+        && data.authorName is string
+        && data.authorName.size() <= 128
+        && (!data.keys().hasAny(['authorUid']) || data.authorUid == request.auth.uid);
+    }
+
+    // ------------------------------- Rooms ----------------------------------
+    match /rooms/{roomId} {
+      // Direct reads only. No collection enumeration.
+      allow get: if signedIn() && (
+        (resource.data.keys().hasAny(['privacy']) && resource.data.privacy == 'public') ||
+        isMemberData(resource.data)
+      );
+      allow list: if false;
+
+      // A room can only be created by its authenticated owner.
+      allow create: if signedIn()
+        && validRoom(request.resource.data)
+        && request.resource.data.roomCode == roomId
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.creatorRole == 'owner'
+        && request.resource.data.participants is map
+        && request.resource.data.participants.keys().hasAll([request.auth.uid])
+        && request.resource.data.participants[request.auth.uid].role == 'owner'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      // Normal members can edit content/title/label and their own presence.
+      // Owners/admins additionally manage members and lifecycle settings.
+      allow update: if signedIn()
+        && validRoom(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (
+          (
+            (isOwnerData(resource.data) || isAdminData(resource.data) || (isMemberData(resource.data) && resource.data.participants[request.auth.uid].role in ['editor','collaborator','teacher','instructor','member','developer','student']))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'content', 'updatedAt', 'title', 'label', 'attachments',
+              'users', 'typingUsers', 'participants', 'lastClientId', 'lastTxId'
+            ])
+            && (
+              selfPresenceOnly(resource.data, request.resource.data)
+              || (
+                request.resource.data.diff(resource.data).affectedKeys().hasAny(['content', 'title', 'label', 'attachments', 'updatedAt', 'lastClientId', 'lastTxId'])
+                && request.resource.data.updatedAt == request.time
+                && (
+                  !request.resource.data.diff(resource.data).affectedKeys().hasAny(['users', 'typingUsers', 'participants'])
+                  || selfPresenceOnly(resource.data, request.resource.data)
+                )
+              )
+            )
+          )
+          || isPublicSelfJoin(roomId)
+          || (
+            isAdminData(resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'updatedAt', 'privacy', 'status', 'participantLimit', 'permissions',
+              'editingPolicy', 'codeExecutionEnabled', 'voiceChatEnabled',
+              'chatEnabled', 'defaultRole', 'expiresAt', 'workspaceName', 'title', 'label',
+              'attachments', 'ownerName', 'workspaceRoleVersion'
+            ])
+            && !ownershipFieldsChanged()
+            && request.resource.data.updatedAt == request.time
+          )
+          || (
+            validOwnerTransfer()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'updatedAt', 'ownerId', 'creatorId', 'creatorRole', 'participants', 'users'
+            ])
+            && request.resource.data.updatedAt == request.time
+          )
+        );
+
+      // Workspace deletion is intentionally a soft-delete operation.
+      allow delete: if false;
+
+      match /audit_logs/{logId} {
+        allow get: if isMemberByRoomId(roomId);
+        allow list: if isAdminByRoomId(roomId);
+        allow create: if isAdminByRoomId(roomId)
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.action is string
+          && request.resource.data.action.size() <= 128;
+        allow update, delete: if false;
+      }
+
+      match /history/{historyId} {
+        allow get: if isMemberByRoomId(roomId);
+        allow list: if isMemberByRoomId(roomId);
+        allow create: if canEditByRoomId(roomId)
+          && validHistory(request.resource.data)
+          && request.resource.data.updatedAt == request.time;
+        allow update, delete: if false;
+      }
+
+      match /messages/{messageId} {
+        allow get: if isMemberByRoomId(roomId);
+        allow list: if isMemberByRoomId(roomId);
+        allow create: if canCommentByRoomId(roomId)
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 20000
+          && request.resource.data.timestamp is number;
+        allow update: if canCommentByRoomId(roomId) && resource.data.senderUid == request.auth.uid;
+        allow delete: if resource.data.senderUid == request.auth.uid || isAdminByRoomId(roomId);
+      }
+
+      match /projects/{projectId} {
+        allow get: if isMemberByRoomId(roomId);
+        allow list: if isMemberByRoomId(roomId);
+        allow create, update: if canEditByRoomId(roomId);
+        allow delete: if isAdminByRoomId(roomId);
+
+        match /folders/{folderId} {
+          allow get: if isMemberByRoomId(roomId);
+          allow list: if isMemberByRoomId(roomId);
+          allow create, update: if canEditByRoomId(roomId);
+          allow delete: if canEditByRoomId(roomId);
+        }
+
+        match /files/{fileId} {
+          allow get: if isMemberByRoomId(roomId);
+          allow list: if isMemberByRoomId(roomId);
+          allow create, update: if canEditByRoomId(roomId)
+            && request.resource.data.content is string
+            && request.resource.data.content.size() <= 1048576;
+          allow delete: if canEditByRoomId(roomId);
+
+          match /versions/{versionId} {
+            allow get: if isMemberByRoomId(roomId);
+            allow list: if isMemberByRoomId(roomId);
+            allow create: if canEditByRoomId(roomId)
+              && request.resource.data.content is string
+              && request.resource.data.content.size() <= 1048576;
+            allow update, delete: if false;
+          }
+        }
+
+        match /trash/{trashId} {
+          allow get: if isMemberByRoomId(roomId);
+          allow list: if isMemberByRoomId(roomId);
+          allow create, update, delete: if canEditByRoomId(roomId);
+        }
+      }
+    }
+
+    // ----------------------------- Workspaces --------------------------------
+    // This collection is kept as a reference/index layer. Membership is still
+    // authoritative in rooms/{roomId} during Phase 1.
+    match /workspaces/{workspaceId} {
+      allow get: if signedIn() && validId(workspaceId);
+      allow list: if false;
+      allow create: if signedIn() && validId(workspaceId);
+      allow update: if signedIn() && resource.data.ownerId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // ------------------------------- Users ----------------------------------
+    match /users/{userId} {
+      allow get: if signedIn() && request.auth.uid == userId;
+      allow list: if false;
+      allow create, update: if signedIn() && request.auth.uid == userId;
+      allow delete: if false;
+
+      match /workspaces/{workspaceId} {
+        allow get: if signedIn() && request.auth.uid == userId;
+        allow list: if signedIn() && request.auth.uid == userId;
+        allow create, update: if signedIn() && request.auth.uid == userId;
+        allow delete: if signedIn() && request.auth.uid == userId;
+      }
+    }
+  }
+}

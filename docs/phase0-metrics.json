@@ -1,0 +1,29 @@
+{
+  "sourceScope": ["src", "server*", "electron"],
+  "sourceFiles": 182,
+  "typescriptFiles": 98,
+  "tsxFiles": 81,
+  "useEffectOccurrences": 122,
+  "textualAnyOccurrences": 354,
+  "localStorageOccurrences": 171,
+  "dangerouslySetInnerHTMLOccurrences": 3,
+  "innerHTMLAssignments": 5,
+  "execOccurrences": 14,
+  "spawnOccurrences": 2,
+  "testFiles": 4,
+  "largestFiles": [
+    {"path":"src/App.tsx","lines":8519},
+    {"path":"src/components/CodeWorkspace.tsx","lines":2505},
+    {"path":"src/components/collaboration/ChatPanel.tsx","lines":1826},
+    {"path":"src/components/code/InteractiveTerminal.tsx","lines":1587},
+    {"path":"src/services/exportService.ts","lines":1561},
+    {"path":"src/hooks/useLiveRoom.ts","lines":1531}
+  ],
+  "validation": {
+    "dependenciesInstalled": false,
+    "productionBuildVerified": false,
+    "typecheckVerified": false,
+    "firebaseEmulatorSecurityVerified": false,
+    "electronRuntimeVerified": false
+  }
+}

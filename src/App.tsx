@@ -134,6 +134,8 @@ import { initOfflineDB, putOfflineItem, enqueueOfflineOp, dequeueOfflineOp } fro
 import { DocumentConflict } from './types';
 import { useAppUI } from './state/AppUIContext';
 import { usePWA } from './hooks/usePWA';
+import { useDocumentPersistence } from './hooks/useDocumentPersistence';
+import { useWorkspaceCommands } from './application/useWorkspaceCommands';
 
 // Lazy-loaded heavy components for accelerated app startup & code splitting
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal'));
@@ -2578,9 +2580,6 @@ export default function App() {
     archiveWorkspace,
     restoreWorkspace,
     deleteWorkspace,
-    updateParticipantRole,
-    removeParticipant,
-    transferOwnership,
     workspaceType,
     workspaceName,
     workspaceStatus
@@ -2598,40 +2597,20 @@ export default function App() {
     )
   );
 
-  const handleArchiveWorkspace = async () => {
-    try {
-      await archiveWorkspace();
-      addToast('info', 'Workspace archived and set to read-only mode.');
-    } catch (err: any) {
-      addToast('error', err.message || 'Failed to archive workspace.');
-    }
-  };
-
-  const handleRestoreWorkspace = async () => {
-    try {
-      await restoreWorkspace();
-      addToast('success', 'Workspace restored and active for live editing.');
-    } catch (err: any) {
-      addToast('error', err.message || 'Failed to restore workspace.');
-    }
-  };
-
-  const handleConfirmDeleteWorkspace = async () => {
-    try {
-      const wsTitle = room?.workspaceName || room?.title || roomCode || 'Workspace';
-      await deleteWorkspace();
-      setIsDeleteModalOpen(false);
-      handleNavigateRoom(null);
-      addToast('success', `Workspace "${wsTitle}" permanently deleted.`);
-    } catch (err: any) {
-      addToast('error', err.message || 'Failed to delete workspace.');
-    }
-  };
-
-  const handleLeaveWorkspace = () => {
-    handleNavigateRoom(null);
-    addToast('info', 'Disconnected session. Returned to Dashboard.');
-  };
+  const {
+    archive: handleArchiveWorkspace,
+    restore: handleRestoreWorkspace,
+    remove: handleConfirmDeleteWorkspace,
+    leave: handleLeaveWorkspace,
+  } = useWorkspaceCommands({
+    room,
+    roomCode,
+    archiveWorkspace,
+    restoreWorkspace,
+    deleteWorkspace,
+    addToast,
+    navigateToDashboard: () => handleNavigateRoom(null),
+  });
 
   const activeLocalNote = useMemo(
     () => localNotes.find(n => n.id === activeLocalNoteId),
@@ -2649,133 +2628,16 @@ export default function App() {
     [roomCode, room?.attachments, activeLocalNote?.attachments]
   );
 
-  const [localSavingState, setLocalSavingState] = useState<SyncStatus>('synced');
-  const localSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingLocalPersistenceRef = useRef<{
-    id: string;
-    title: string;
-    content: string;
-    createdAt?: number;
-    updatedAt: number;
-    attachments?: Attachment[];
-    workspaceId?: string;
-    roomCode?: string;
-  } | null>(null);
-  const localPersistenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const flushLocalPersistence = useCallback(() => {
-    const pending = pendingLocalPersistenceRef.current;
-    if (!pending) return;
-    pendingLocalPersistenceRef.current = null;
-    void putOfflineItem('documents', pending).catch((err) => {
-      console.warn('[LivePad] IndexedDB persistence failed:', err);
-    });
-  }, []);
-
-  const scheduleLocalPersistence = useCallback((pending: NonNullable<typeof pendingLocalPersistenceRef.current>) => {
-    pendingLocalPersistenceRef.current = pending;
-    if (localPersistenceTimeoutRef.current) {
-      clearTimeout(localPersistenceTimeoutRef.current);
-    }
-    localPersistenceTimeoutRef.current = setTimeout(() => {
-      localPersistenceTimeoutRef.current = null;
-      flushLocalPersistence();
-    }, 400);
-  }, [flushLocalPersistence]);
-
-  useEffect(() => {
-    return () => {
-      if (localSaveTimeoutRef.current) clearTimeout(localSaveTimeoutRef.current);
-      if (localPersistenceTimeoutRef.current) clearTimeout(localPersistenceTimeoutRef.current);
-      flushLocalPersistence();
-    };
-  }, [flushLocalPersistence]);
-
-  // Custom update content function. UI state updates immediately, while expensive
-  // localStorage/IndexedDB persistence is coalesced so typing stays responsive.
-  const handleUpdateContent = useCallback((newVal: string) => {
-    const updatedAt = Date.now();
-
-    if (activeLocalNoteId) {
-      setLocalSavingState('saving');
-      const activeNoteObj = localNotes.find((note) => note.id === activeLocalNoteId);
-      if (!activeNoteObj) return;
-
-      const updatedNote: LocalNotepad = {
-        ...activeNoteObj,
-        content: newVal,
-        updatedAt,
-      };
-      setLocalNotes((prev) => prev.map((note) => note.id === activeLocalNoteId ? updatedNote : note));
-      setLastSavedTime(updatedAt);
-
-      scheduleLocalPersistence({
-        id: updatedNote.id,
-        title: updatedNote.title,
-        content: newVal,
-        createdAt: updatedNote.createdAt,
-        updatedAt,
-        attachments: updatedNote.attachments || [],
-      });
-
-      // localStorage is also coalesced with the same 400ms write window.
-      if (localSaveTimeoutRef.current) clearTimeout(localSaveTimeoutRef.current);
-      localSaveTimeoutRef.current = setTimeout(() => {
-        localSaveTimeoutRef.current = null;
-        setLocalNotes((current) => {
-          try {
-            localStorage.setItem('livepad_local_notepads', JSON.stringify(current));
-          } catch (err) {
-            console.warn('[LivePad] localStorage persistence failed:', err);
-          }
-          return current;
-        });
-      }, 400);
-      return;
-    }
-
-    // Room / Workspace Document
-    if (roomCode) {
-      const currentTitle = room?.title || room?.workspaceName || `Workspace #${roomCode}`;
-      scheduleLocalPersistence({
-        id: roomCode,
-        title: currentTitle,
-        content: newVal,
-        updatedAt,
-        workspaceId: room?.workspaceId || roomCode,
-        roomCode,
-      });
-
-      // Queue only while offline. Online changes continue through useLiveRoom's
-      // debounced realtime synchronization path below.
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        enqueueOfflineOp({
-          type: 'UPDATE',
-          entity: 'rooms',
-          entityId: roomCode,
-          payload: {
-            content: newVal,
-            updatedAt,
-            lastUpdatedBy: userName,
-          },
-        }).catch(err => {
-          console.warn('[handleUpdateContent] Sync queue enqueue failed:', err);
-        });
-      }
-    }
-
-    updateContent(newVal);
-  }, [
+  const { localSavingState, handleUpdateContent } = useDocumentPersistence({
     activeLocalNoteId,
     localNotes,
+    setLocalNotes,
+    setLastSavedTime,
     roomCode,
-    room?.title,
-    room?.workspaceName,
-    room?.workspaceId,
-    scheduleLocalPersistence,
-    updateContent,
+    room,
     userName,
-  ]);
+    updateContent,
+  });
 
   const {
     dictationState,

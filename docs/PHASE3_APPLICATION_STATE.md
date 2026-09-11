@@ -70,3 +70,18 @@ No product capability was intentionally deleted in this phase. In particular, PW
 service-worker update prompts, offline readiness, PWA caching, Electron support, collaboration,
 editor modes, exports, AI, and coding features remain in the application. The work focuses on
 state ownership, render isolation, and persistence cost.
+
+## Phase 3 continuation — application boundaries
+- Extracted local document/room persistence into `src/hooks/useDocumentPersistence.ts`.
+- Persistence now keeps the latest local-note snapshot in a ref, avoiding a state update solely for a delayed `localStorage` write.
+- Local persistence status now returns to `synced` after a successful flush and reports `error` when browser persistence fails.
+- Extracted workspace lifecycle orchestration into `src/application/useWorkspaceCommands.ts` so archive/restore/delete/leave feedback and navigation are application commands rather than inline App handlers.
+- Existing workspace lifecycle capabilities remain available; this is an ownership/refactoring change, not a feature removal.
+
+
+## Current Phase 3 checkpoint
+- `App.tsx`: 8,508 → 8,370 lines in this continuation (behavior-preserving extraction).
+- Workspace lifecycle commands now have an application-level boundary.
+- Document persistence no longer owns a delayed persistence state update through `setLocalNotes`; it uses a ref snapshot for the delayed browser-storage write.
+- PWA remains enabled; no PWA capability was removed.
+- Feature-preservation rule remains active: refactor/optimize first, remove nothing without an explicit product decision.

@@ -7,8 +7,6 @@ import {
   MessageSquare,
   Mic,
   MessageCircleCode,
-  Code2,
-  Cpu,
   GraduationCap,
   Trash2,
   Settings,
@@ -35,20 +33,17 @@ interface ActivityBarProps {
 
 const primaryTabs: Array<{ id: ActivityBarTab; label: string; icon: React.ElementType; title: string }> = [
   { id: 'explorer', label: 'Files', icon: Files, title: 'Files & project' },
-  { id: 'search', label: 'Find', icon: Search, title: 'Find in project' },
-  { id: 'run', label: 'Run', icon: Bug, title: 'Run & debug' },
-  { id: 'testing', label: 'Check', icon: FlaskConical, title: 'Tests & checks' },
-  { id: 'outline', label: 'Code', icon: Code2, title: 'Code outline' },
-  { id: 'chat', label: 'Chat', icon: MessageSquare, title: 'Class chat' },
-  { id: 'voice', label: 'Voice', icon: Mic, title: 'Voice room' },
-  { id: 'comments', label: 'Discuss', icon: MessageCircleCode, title: 'Code comments' },
+  { id: 'knowledge', label: 'Learn', icon: BookOpen, title: 'Lessons & learning' },
+  { id: 'run', label: 'Run', icon: Bug, title: 'Run your code' },
+  { id: 'testing', label: 'Check', icon: FlaskConical, title: 'Checks & tests' },
+  { id: 'chat', label: 'Chat', icon: MessageSquare, title: 'Learn together' },
+  { id: 'comments', label: 'Discuss', icon: MessageCircleCode, title: 'Discuss code' },
 ];
 
 const teacherTabs: Array<{ id: ActivityBarTab; label: string; icon: React.ElementType; title: string }> = [
   { id: 'admin', label: 'Class', icon: GraduationCap, title: 'Class controls & members' },
   { id: 'knowledge', label: 'Lessons', icon: BookOpen, title: 'Lesson resources' },
   { id: 'dashboard', label: 'Progress', icon: LayoutDashboard, title: 'Class/project progress' },
-  { id: 'tasks', label: 'Tasks', icon: Cpu, title: 'Build & task runner' },
 ];
 
 export function ActivityBar({
@@ -118,17 +113,6 @@ export function ActivityBar({
             aria-label="Projects"
           >
             <FolderGit2 className="w-[17px] h-[17px] stroke-[1.7]" />
-          </button>
-        )}
-        {onOpenSettings && (
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="w-full h-9 flex items-center justify-center text-white/35 hover:text-white/75 transition-colors cursor-pointer"
-            title="Settings"
-            aria-label="Settings"
-          >
-            <Settings className="w-[17px] h-[17px] stroke-[1.7]" />
           </button>
         )}
         <button

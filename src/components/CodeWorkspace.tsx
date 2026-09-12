@@ -230,43 +230,23 @@ const DEFAULT_FILES: ProjectFile[] = [
     language: 'html',
     path: 'index.html',
     parentId: null,
-    content: `<!DOCTYPE html>
+    content: `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <title>LivePad Code Workspace</title>
+  <title>My first web page</title>
+  <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-6">
-  <div class="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-4">
-    <div class="inline-flex p-3 bg-cyan-500/10 text-cyan-400 rounded-2xl mb-2">
-      <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-      </svg>
-    </div>
-    <h1 class="text-2xl font-black text-white tracking-tight">LivePad Interactive Sandbox</h1>
-    <p class="text-slate-400 text-sm">A real browser preview: edit this file, run it, and interact with the result.</p>
-    <div class="rounded-2xl bg-slate-950 border border-slate-800 p-4 space-y-3">
-      <div class="text-xs text-slate-400">Local counter</div>
-      <div id="count" class="text-4xl font-black text-white">0</div>
-      <div class="grid grid-cols-2 gap-2">
-        <button id="increment" class="py-2 bg-cyan-600 hover:bg-cyan-500 font-bold text-white rounded-xl">Increment</button>
-        <button id="reset" class="py-2 bg-slate-800 hover:bg-slate-700 font-bold text-white rounded-xl">Reset</button>
-      </div>
-      <div id="status" class="text-[11px] text-emerald-400">Ready</div>
-    </div>
-  </div>
+<body>
+  <main class="card">
+    <p class="eyebrow">My first website</p>
+    <h1>Hello, LivePad!</h1>
+    <p id="message">I am learning HTML, CSS and JavaScript.</p>
+    <button id="changeMessage">Click me</button>
+  </main>
 
-  <script>
-    let count = Number(localStorage.getItem('livepad-demo-count') || 0);
-    const countEl = document.getElementById('count');
-    const statusEl = document.getElementById('status');
-    const render = () => { countEl.textContent = String(count); localStorage.setItem('livepad-demo-count', String(count)); statusEl.textContent = 'Saved locally'; };
-    document.getElementById('increment').addEventListener('click', () => { count += 1; render(); });
-    document.getElementById('reset').addEventListener('click', () => { count = 0; render(); });
-    render();
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>`,
     createdAt: Date.now(),
@@ -279,21 +259,48 @@ const DEFAULT_FILES: ProjectFile[] = [
   {
     id: 'file-2',
     projectId: 'proj-default-1',
-    name: 'Button.tsx',
-    extension: 'tsx',
-    language: 'typescript',
-    path: 'src/components/ui/Button.tsx',
-    parentId: 'folder-ui',
-    content: `// React UI Button Component
-export function Button({ label, onClick }: { label: string; onClick?: () => void }) {
-  return (
-    <button 
-      onClick={onClick}
-      className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 font-bold text-white rounded-xl shadow-md transition-all"
-    >
-      {label}
-    </button>
-  );
+    name: 'style.css',
+    extension: 'css',
+    language: 'css',
+    path: 'style.css',
+    parentId: null,
+    content: `* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-family: system-ui, sans-serif;
+  background: #f4f7fb;
+  color: #172033;
+}
+
+.card {
+  width: min(90vw, 520px);
+  padding: 2.5rem;
+  border-radius: 24px;
+  background: white;
+  box-shadow: 0 20px 60px rgba(23, 32, 51, 0.12);
+  text-align: center;
+}
+
+.eyebrow {
+  color: #0891b2;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  background: #0891b2;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
 }`,
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -309,15 +316,12 @@ export function Button({ label, onClick }: { label: string; onClick?: () => void
     language: 'javascript',
     path: 'app.js',
     parentId: null,
-    content: `// LivePad JavaScript Execution Engine
-const systemInfo = {
-  appName: "LivePad Cloud IDE",
-  version: "4.0.0",
-  features: ["Multi-project Workspace", "Unlimited Folder Tree", "Drag & Drop", "IndexedDB Offline", "Firestore Realtime"]
-};
+    content: `const button = document.querySelector('#changeMessage');
+const message = document.querySelector('#message');
 
-console.log("🚀 Initializing LivePad Code Workspace...");
-console.info("System Config Loaded:", JSON.stringify(systemInfo, null, 2));`,
+button.addEventListener('click', () => {
+  message.textContent = 'Great! You just changed a web page with JavaScript.';
+});`,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     createdBy: 'LivePad User',
@@ -1150,6 +1154,15 @@ export default function CodeWorkspace({
       onUpdateContent(selected.content);
     }
   };
+
+  const focusLearningFile = useCallback((kind: 'html' | 'css' | 'js') => {
+    const target = files.find((file) => {
+      if (kind === 'html') return file.extension === 'html' || file.language === 'html';
+      if (kind === 'css') return file.extension === 'css' || file.language === 'css';
+      return file.extension === 'js' || file.extension === 'jsx' || file.language === 'javascript';
+    });
+    if (target) handleSelectFile(target.id);
+  }, [files, handleSelectFile]);
 
   // Real-time workspace diagnostics (compiler & linter)
   const workspaceProblems = React.useMemo(() => {
@@ -2248,18 +2261,29 @@ export default function CodeWorkspace({
 
                   {/* Beginner-first learning strip. Advanced tools remain available in their panels,
                       but the editor itself always tells a new learner what to do next. */}
-                  <div className="shrink-0 min-h-9 px-3 sm:px-4 flex items-center justify-between gap-3 border-b border-white/[0.05] bg-cyan-500/[0.025] text-[10px]">
+                  <div className="livepad-learning-strip shrink-0 min-h-11 px-3 sm:px-4 flex items-center justify-between gap-3 border-b text-[10px]">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 h-5 rounded-md bg-cyan-400/10 border border-cyan-400/15 flex items-center justify-center shrink-0">
-                        <Code2 className="w-3 h-3 text-cyan-300" />
-                      </span>
+                      <span className="livepad-learning-step shrink-0">{isTeachingSession && canControlCodeMode ? 'TEACH' : 'LEARN'}</span>
                       <span className="text-white/55 truncate">
                         {isTeachingSession
-                          ? (canControlCodeMode ? 'Teach together: choose a file, explain the idea, then Run & Check.' : 'Learn together: change the code, then use Run & Check to see what happened.')
-                          : 'Start small: edit the code, run it, and learn from the result.'}
+                          ? (canControlCodeMode ? 'Explain the idea, then run it with the class.' : 'Follow the lesson, change the code, then run it.')
+                          : 'Build the foundation: HTML → CSS → JavaScript.'}
                       </span>
                     </div>
-                    <span className="hidden lg:inline text-white/25 shrink-0">{isTeachingSession ? 'Live session' : 'Practice'} · {codeLanguage.toUpperCase()}</span>
+                    <div className="livepad-language-path shrink-0" role="group" aria-label="Web learning path">
+                      {([['html', 'HTML'], ['css', 'CSS'], ['js', 'JS']] as const).map(([kind, label], index) => (
+                        <React.Fragment key={kind}>
+                          {index > 0 && <span className="text-white/15">→</span>}
+                          <button
+                            type="button"
+                            onClick={() => focusLearningFile(kind)}
+                            className={`livepad-language-chip ${((kind === 'html' && (activeFile?.extension === 'html' || activeFile?.language === 'html')) || (kind === 'css' && (activeFile?.extension === 'css' || activeFile?.language === 'css')) || (kind === 'js' && (activeFile?.extension === 'js' || activeFile?.extension === 'jsx' || activeFile?.language === 'javascript'))) ? 'is-active' : ''}`}
+                          >
+                            {label}
+                          </button>
+                        </React.Fragment>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Monaco Code Editor Area (Supports Single or Split Editor View) */}

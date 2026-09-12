@@ -29,3 +29,9 @@ Firestore room fields:
 - `codeModeOpenedAt: timestamp`
 
 Only owner/admin/teacher participants can mutate these fields. Students cannot force the classroom state.
+
+## Web foundations redesign pass
+
+LivePad Code Studio now treats HTML, CSS, and JavaScript as the primary beginner learning path. The default starter project is intentionally vanilla and uses three connected files: `index.html`, `style.css`, and `app.js`. The editor chrome prioritizes Files, Learn, Run, Check, Chat, and Discuss; advanced classroom controls remain available to authorized teachers/admins rather than competing with the learner's main path.
+
+The HTML/CSS/JS path control is functional: selecting HTML, CSS, or JS focuses the first matching project file. The learning strip also communicates the recommended foundation order without locking learners into it.

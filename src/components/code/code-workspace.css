@@ -73,3 +73,49 @@
 .livepad-code-tab-indicator { background: var(--lp-accent); }
 .livepad-code-tab-action { color: #64748b; }
 .livepad-code-tab-action:hover { color: #f8fafc; background: rgba(255,255,255,.07); }
+
+/* Learning-first web foundation controls */
+.livepad-learning-strip {
+  background: #0d141d;
+  border-color: var(--lp-border);
+}
+.livepad-learning-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid rgba(34, 211, 238, .18);
+  border-radius: 6px;
+  color: #67e8f9;
+  background: rgba(34, 211, 238, .07);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.livepad-language-path {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.livepad-language-chip {
+  min-width: 34px;
+  height: 25px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #7f8da1;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+.livepad-language-chip:hover { color: #e6edf5; background: rgba(255,255,255,.045); }
+.livepad-language-chip.is-active {
+  color: #e6edf5;
+  background: rgba(34,211,238,.09);
+  border-color: rgba(34,211,238,.18);
+}

@@ -46,7 +46,7 @@ beforeAll(async () => {
     await setDoc(doc(ctx.firestore(), 'users/owner'), { name: 'Owner' });
     await setDoc(doc(ctx.firestore(), 'rooms/ROOM1/projects/p1'), { name: 'Project' });
   });
-});
+}, 30000);
 
 afterAll(async () => {
   if (testEnv) await testEnv.cleanup();

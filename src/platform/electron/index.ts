@@ -96,7 +96,7 @@ export class ElectronPlatform implements IPlatformServices {
         Logger.error('Electron Logs', 'Electron createItem failed', err);
       }
     }
-    return targetPath;
+    throw new Error('Electron filesystem bridge unavailable');
   }
 
   public async writeFile(filePath: string, content: string): Promise<string> {
@@ -107,7 +107,7 @@ export class ElectronPlatform implements IPlatformServices {
         Logger.error('Electron Logs', 'Electron writeFile failed', err);
       }
     }
-    return filePath;
+    throw new Error('Electron filesystem bridge unavailable');
   }
 
   public async renameItem(oldPath: string, newPath: string): Promise<string> {
@@ -118,7 +118,7 @@ export class ElectronPlatform implements IPlatformServices {
         Logger.error('Electron Logs', 'Electron renameItem failed', err);
       }
     }
-    return newPath;
+    throw new Error('Electron filesystem bridge unavailable');
   }
 
   public async deleteItem(targetPath: string, useRecycleBin: boolean = true): Promise<boolean> {
@@ -129,7 +129,7 @@ export class ElectronPlatform implements IPlatformServices {
         Logger.error('Electron Logs', 'Electron deleteItem failed', err);
       }
     }
-    return true;
+    throw new Error('Electron filesystem bridge unavailable');
   }
 
   public async duplicateItem(targetPath: string): Promise<string> {
@@ -140,7 +140,7 @@ export class ElectronPlatform implements IPlatformServices {
         Logger.error('Electron Logs', 'Electron duplicateItem failed', err);
       }
     }
-    return `${targetPath}-copy`;
+    throw new Error('Electron filesystem bridge unavailable');
   }
 
   public async revealInExplorer(targetPath: string): Promise<boolean> {
@@ -250,7 +250,7 @@ export class ElectronPlatform implements IPlatformServices {
     if (this.bridge) {
       return await this.bridge.killProcess(processId);
     }
-    return true;
+    return false;
   }
 
   public onTerminalOutput(callback: (data: { processId: string; type: 'stdout' | 'stderr'; data: string }) => void): () => void {

@@ -55,13 +55,6 @@ service cloud.firestore {
         && data.participants.keys().hasAll([request.auth.uid]);
     }
 
-    function roleByRoomId(roomId) {
-      return isMemberByRoomId(roomId)
-        && roomRef(roomId).data.participants[request.auth.uid].keys().hasAny(['role'])
-        ? roomRef(roomId).data.participants[request.auth.uid].role
-        : null;
-    }
-
     function isOwnerByRoomId(roomId) {
       return signedIn()
         && roomExists(roomId)
@@ -74,7 +67,10 @@ service cloud.firestore {
     }
 
     function isAdminByRoomId(roomId) {
-      return isOwnerByRoomId(roomId) || (isMemberByRoomId(roomId) && roleByRoomId(roomId) == 'admin');
+      return isOwnerByRoomId(roomId)
+        || (isMemberByRoomId(roomId)
+          && roomRef(roomId).data.participants[request.auth.uid].keys().hasAny(['role'])
+          && roomRef(roomId).data.participants[request.auth.uid].role == 'admin');
     }
 
     function isAdminData(data) {
@@ -99,23 +95,21 @@ service cloud.firestore {
     }
 
     function canEditByRoomId(roomId) {
-      return isMemberByRoomId(roomId) && (
-        roleByRoomId(roomId) == 'owner' ||
-        roleByRoomId(roomId) == 'admin' ||
-        roleByRoomId(roomId) == 'editor' ||
-        roleByRoomId(roomId) == 'collaborator' ||
-        roleByRoomId(roomId) == 'teacher' ||
-        roleByRoomId(roomId) == 'instructor' ||
-        roleByRoomId(roomId) == 'member' ||
-        roleByRoomId(roomId) == 'developer' ||
-        roleByRoomId(roomId) == 'student'
-      );
+      return isMemberByRoomId(roomId)
+        && roomRef(roomId).data.participants[request.auth.uid].keys().hasAny(['role'])
+        && roomRef(roomId).data.participants[request.auth.uid].role in [
+          'owner', 'admin', 'editor', 'collaborator', 'teacher',
+          'instructor', 'member', 'developer', 'student'
+        ];
     }
 
     function canCommentByRoomId(roomId) {
-      return isMemberByRoomId(roomId) && (
-        canEditByRoomId(roomId) || roleByRoomId(roomId) == 'commenter' || roleByRoomId(roomId) == 'reviewer'
-      );
+      return isMemberByRoomId(roomId)
+        && roomRef(roomId).data.participants[request.auth.uid].keys().hasAny(['role'])
+        && roomRef(roomId).data.participants[request.auth.uid].role in [
+          'owner', 'admin', 'editor', 'collaborator', 'teacher',
+          'instructor', 'member', 'developer', 'student', 'commenter', 'reviewer'
+        ];
     }
 
     function validRoom(data) {

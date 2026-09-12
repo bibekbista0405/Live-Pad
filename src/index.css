@@ -95,7 +95,7 @@ html.theme-transition *::after {
 }
 
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 /* Custom Sleek Scrollbars */
@@ -637,6 +637,13 @@ input[type="range"]::-moz-range-thumb {
    the first paint does not compete with React startup work. */
 .livepad-intro {
   isolation: isolate;
+  opacity: 1;
+  will-change: opacity;
+  transition: opacity 420ms ease-out;
+}
+
+.livepad-intro-closing {
+  opacity: 0;
 }
 
 .livepad-intro-grid {
@@ -777,6 +784,7 @@ input[type="range"]::-moz-range-thumb {
 /* Phase 5 landing-page scroll optimization. Avoid backdrop-filter and JS
    hover animation on the six static feature cards. */
 .livepad-landing-card {
+  contain: layout paint;
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 .livepad-landing-card:hover {

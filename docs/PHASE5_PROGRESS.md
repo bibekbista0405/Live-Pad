@@ -28,3 +28,15 @@ npm run test:rules
 ```
 
 This workspace does not claim validation results until those commands are run against this exact build.
+### Continued hardening increment
+- Kept the current CSS-driven intro; no video dependency is introduced.
+- Removed the intro component's Motion runtime dependency so its boot animation is CSS-only.
+- Changed global document scrolling to `auto`; targeted scroll surfaces retain explicit containment.
+- Added paint/layout containment to landing feature cards to reduce scroll/render work.
+- Extended Electron no-fake boundaries so missing native filesystem operations throw explicit errors instead of returning fabricated paths/success.
+- Changed the Electron process-kill fallback to report `false` when the native bridge is unavailable.
+- Increased the Firestore rules suite `beforeAll` hook timeout to 30 seconds to accommodate cold emulator startup.
+- Simplified room-role rule evaluation to reduce repeated document/function evaluation and avoid unnecessary rules-expression pressure.
+
+The future intro video is intentionally deferred; the current lightweight animation remains the canonical boot experience until a real media asset is available.
+

@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion } from 'motion/react';
 import { ChevronRight, Play } from 'lucide-react';
 
 interface IntroScreenProps {
@@ -33,11 +32,8 @@ export default function IntroScreen({ onComplete }: IntroScreenProps) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 1 }}
-      animate={{ opacity: isClosing ? 0 : 1 }}
-      transition={{ duration: 0.42, ease: 'easeOut' }}
-      className="livepad-intro fixed inset-0 z-[150] flex items-center justify-center overflow-hidden bg-white text-slate-800 dark:bg-[#090b10] dark:text-white select-none"
+    <div
+      className={`livepad-intro fixed inset-0 z-[150] flex items-center justify-center overflow-hidden bg-white text-slate-800 dark:bg-[#090b10] dark:text-white select-none ${isClosing ? 'livepad-intro-closing' : ''}`}
     >
       <div className="livepad-intro-grid absolute inset-0" aria-hidden="true" />
       <div className="livepad-intro-glow absolute inset-0" aria-hidden="true" />
@@ -81,6 +77,6 @@ export default function IntroScreen({ onComplete }: IntroScreenProps) {
         <span>Skip Introduction</span>
         <ChevronRight className="w-3.5 h-3.5 text-cyan-600" />
       </button>
-    </motion.div>
+    </div>
   );
 }

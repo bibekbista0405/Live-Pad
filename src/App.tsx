@@ -1337,7 +1337,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const handleDocumentClick = (e: MouseEvent) => {
+    const handleDocumentClick = (e: globalThis.MouseEvent) => {
       const textarea = textareaRef.current;
       const menu = document.getElementById('livepad-floating-formatting-menu');
       if (textarea && menu) {
@@ -1890,6 +1890,7 @@ export default function App() {
   const [htmlPreviewDoc, setHtmlPreviewDoc] = useState<string>('');
   const [jsSandboxDoc, setJsSandboxDoc] = useState<string>('');
   const [sandboxRunKey, setSandboxRunKey] = useState(0);
+  const jsSandboxFrameRef = useRef<HTMLIFrameElement | null>(null);
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [isSnippetDropdownOpen, setIsSnippetDropdownOpen] = useState<boolean>(false);
   const [isWordSizeDropdownOpen, setIsWordSizeDropdownOpen] = useState<boolean>(false);
@@ -3333,6 +3334,7 @@ export default function App() {
   useEffect(() => {
     const handleSandboxMessage = (event: MessageEvent) => {
       if (event.data?.source !== 'livepad-js-sandbox') return;
+      if (event.source !== jsSandboxFrameRef.current?.contentWindow) return;
       const payload = event.data.payload || {};
       if (event.data.type === 'CONSOLE_LOG') {
         const type = payload.level === 'error' ? 'error' : payload.level === 'warn' ? 'warn' : payload.level === 'info' ? 'info' : 'log';
@@ -7009,7 +7011,7 @@ console.warn("Verify your variables before deployment!");
                                         <button type="button" onClick={() => setConsoleLogs([])} className="hover:text-white cursor-pointer hover:underline uppercase tracking-wider font-extrabold text-[9px]">Clear Console</button>
                                       </div>
                                       <div className="flex-1 grid grid-rows-[minmax(0,1fr)_minmax(0,1fr)] min-h-0">
-                                        <iframe key={sandboxRunKey} title="LivePad isolated JavaScript sandbox" srcDoc={jsSandboxDoc || '<!doctype html><html><body style=\"background:#09090b\"></body></html>'} sandbox="allow-scripts" referrerPolicy="no-referrer" className="w-full h-full border-0 bg-zinc-950" />
+                                        <iframe key={sandboxRunKey} title="LivePad isolated JavaScript sandbox" srcDoc={jsSandboxDoc || '<!doctype html><html><body style=\"background:#09090b\"></body></html>'} sandbox="allow-scripts" referrerPolicy="no-referrer" ref={jsSandboxFrameRef} className="w-full h-full border-0 bg-zinc-950" />
                                         <div className="min-h-0 p-4 overflow-y-auto font-mono text-[11px] leading-relaxed space-y-3 border-t border-zinc-800">
                                           {consoleLogs.length === 0 ? <div className="text-zinc-500 italic py-6 text-center select-none">Run JavaScript to see real console output from the isolated browser runtime.</div> : consoleLogs.map((log) => {
                                             const typeColors = log.type === 'error' ? 'text-rose-400 bg-rose-500/5 border-l-2 border-rose-500 pl-2 py-0.5' : log.type === 'warn' ? 'text-amber-400 bg-amber-500/5 border-l-2 border-amber-500 pl-2 py-0.5' : log.type === 'info' ? 'text-cyan-400 bg-cyan-500/5 border-l-2 border-cyan-500 pl-2 py-0.5' : 'text-zinc-200 pl-2';

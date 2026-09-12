@@ -121,7 +121,7 @@ service cloud.firestore {
     function validRoom(data) {
       return data.keys().hasAll(['content', 'createdAt', 'updatedAt'])
         && data.content is string
-        && data.content.size() <= 1048576
+        && data.content.size() <= 262144
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
         && (!data.keys().hasAny(['roomCode']) || (data.roomCode is string && data.roomCode.size() >= 4 && data.roomCode.size() <= 16))

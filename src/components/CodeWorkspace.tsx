@@ -128,6 +128,7 @@ import {
   saveFileVersionHistoryLocal
 } from '../services/indexedDBService';
 import { ensureAuth } from '../lib/firebase';
+import { Platform } from '../platform';
 import {
   subscribeToWorkspaceProjects,
   subscribeToProjectStructure,
@@ -373,171 +374,143 @@ export default function CodeWorkspace({
     { id: 'cfg-4', name: 'Python Runner (main.py)', type: 'python', program: 'main.py' }
   ]);
   const [activeConfigId, setActiveConfigId] = useState<string>('cfg-1');
-  const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([
-    { id: 'bp-1', fileId: 'file-1', filePath: 'src/App.tsx', lineNumber: 18, enabled: true },
-    { id: 'bp-2', fileId: 'file-2', filePath: 'src/components/CodeWorkspace.tsx', lineNumber: 1420, enabled: true }
-  ]);
+  const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([]);
   const [variableScopes, setVariableScopes] = useState<VariableScope[]>([]);
-  const [watchExpressions, setWatchExpressions] = useState<WatchExpression[]>([
-    { id: 'w-1', expression: 'userName', value: '"Developer"' },
-    { id: 'w-2', expression: 'activeFile?.name', value: '"App.tsx"' },
-    { id: 'w-3', expression: 'files.length', value: '14' }
-  ]);
+  const [watchExpressions, setWatchExpressions] = useState<WatchExpression[]>([]);
   const [callStack, setCallStack] = useState<StackFrame[]>([]);
   const [activeStackFrameId, setActiveStackFrameId] = useState<string | null>(null);
   const [activeDebugLine, setActiveDebugLine] = useState<number | null>(null);
-  const [debugConsoleLogs, setDebugConsoleLogs] = useState<DebugConsoleLog[]>([
-    { id: 'dlog-1', type: 'info', text: 'Debugger session initialized with sourcemap support.', time: new Date().toLocaleTimeString() }
-  ]);
+  const [debugSessionId, setDebugSessionId] = useState<string | null>(null);
+  const [debugConsoleLogs, setDebugConsoleLogs] = useState<DebugConsoleLog[]>([]);
 
-  // Testing State
-  const [testSuites, setTestSuites] = useState<TestSuite[]>([
-    {
-      id: 'suite-1',
-      name: 'Auth & Workspace Sync Tests (auth.test.ts)',
-      fileId: 'file-test-1',
-      filePath: 'src/tests/auth.test.ts',
-      status: 'passed',
-      cases: [
-        { id: 'c-1', suiteId: 'suite-1', fileId: 'file-test-1', filePath: 'src/tests/auth.test.ts', name: 'should initialize anonymous user session', status: 'passed', durationMs: 14 },
-        { id: 'c-2', suiteId: 'suite-1', fileId: 'file-test-1', filePath: 'src/tests/auth.test.ts', name: 'should sync workspace files to Firestore', status: 'passed', durationMs: 28 },
-        { id: 'c-3', suiteId: 'suite-1', fileId: 'file-test-1', filePath: 'src/tests/auth.test.ts', name: 'should generate valid RTC room code', status: 'passed', durationMs: 8 }
-      ]
-    },
-    {
-      id: 'suite-2',
-      name: 'Monaco Code Editor & Syntax (editor.test.ts)',
-      fileId: 'file-test-2',
-      filePath: 'src/tests/editor.test.ts',
-      status: 'failed',
-      cases: [
-        { id: 'c-4', suiteId: 'suite-2', fileId: 'file-test-2', filePath: 'src/tests/editor.test.ts', name: 'should format TypeScript on save', status: 'passed', durationMs: 42 },
-        { id: 'c-5', suiteId: 'suite-2', fileId: 'file-test-2', filePath: 'src/tests/editor.test.ts', name: 'should trigger breakpoint on line click', status: 'passed', durationMs: 19 },
-        { id: 'c-6', suiteId: 'suite-2', fileId: 'file-test-2', filePath: 'src/tests/editor.test.ts', name: 'should highlight coverage lines accurately', status: 'failed', durationMs: 65, errorMessage: 'Expected line 24 to have class "coverage-covered-line", but found undefined.', stackTrace: 'AssertionError: at TestContext.<anonymous> (src/tests/editor.test.ts:48:12)\n  at processTicksAndRejections (node:internal/process/task_queues:95:5)' }
-      ]
-    }
-  ]);
-  const [selectedTestCaseId, setSelectedTestCaseId] = useState<string | null>('c-6');
+  // Testing State — results are populated only by a real Vitest run.
+  const [testSuites, setTestSuites] = useState<TestSuite[]>([]);
+  const [selectedTestCaseId, setSelectedTestCaseId] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
-  const [showCoverageOverlay, setShowCoverageOverlay] = useState(true);
+  const [showCoverageOverlay, setShowCoverageOverlay] = useState(false);
   const [coverageReport, setCoverageReport] = useState<CoverageReport>({
-    overall: { statementsPct: 88, branchesPct: 82, functionsPct: 91, linesPct: 87 },
-    files: [
-      {
-        fileId: 'file-1',
-        filePath: 'src/App.tsx',
-        statements: { total: 40, covered: 36, pct: 90 },
-        branches: { total: 10, covered: 8, pct: 80 },
-        functions: { total: 8, covered: 8, pct: 100 },
-        lines: { total: 38, covered: 34, pct: 89 },
-        coveredLines: [1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 14, 15, 18, 19, 20, 22, 23, 24, 25, 28, 30, 31, 32, 34, 35],
-        uncoveredLines: [6, 7, 16, 26]
-      }
-    ]
+    overall: { statementsPct: 0, branchesPct: 0, functionsPct: 0, linesPct: 0 },
+    files: []
   });
 
   // Debugger Action Handlers
-  const handleStartDebug = () => {
-    setDebugStatus('starting');
-    const now = new Date().toLocaleTimeString();
+  const appendDebugLog = (type: DebugConsoleLog['type'], text: string) => {
+    setDebugConsoleLogs((prev) => [
+      ...prev,
+      { id: `dlog-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, type, text, time: new Date().toLocaleTimeString() }
+    ]);
+  };
+
+  const handleStartDebug = async () => {
+    if (!Platform.isElectron) {
+      onAddToast('info', 'Native debugging is available in LivePad Desktop Edition only.');
+      return;
+    }
     const configObj = runConfigurations.find(c => c.id === activeConfigId) || runConfigurations[0];
-    setDebugConsoleLogs((prev) => [
-      ...prev,
-      { id: `dlog-${Date.now()}`, type: 'info', text: `[Debugger] Starting process "${configObj.name}" (${configObj.program})...`, time: now }
-    ]);
+    const recentProjects = await Platform.getRecentProjects();
+    const root = recentProjects[0]?.path;
+    const scriptPath = activeFile?.path
+      ? root ? `${root.replace(/[\\/]+$/, '')}/${activeFile.path}` : activeFile.path
+      : configObj.program;
+    if (!root && !scriptPath.match(/^[A-Za-z]:[\\/]/) && !scriptPath.startsWith('/')) {
+      onAddToast('error', 'Open a desktop project folder before starting the debugger.');
+      return;
+    }
 
-    setTimeout(() => {
-      setDebugStatus('paused');
-      const pausedLine = 18;
-      setActiveDebugLine(pausedLine);
-      setVariableScopes([
-        {
-          name: 'Local',
-          variables: {
-            activeFile: activeFile ? activeFile.name : 'App.tsx',
-            userRole: userRole || 'owner',
-            roomCode: roomCode || 'ROOM-8821',
-            isPwaMounted,
-            counter: 42
-          }
-        },
-        {
-          name: 'Global',
-          variables: {
-            window: { innerWidth: 1440, innerHeight: 900 },
-            navigator: { userAgent: 'LivePad Browser IDE' }
-          }
-        }
-      ]);
-      setCallStack([
-        { id: 'st-1', name: 'handleExecute (App.tsx:18)', fileId: activeFileId || 'file-1', filePath: activeFile?.path || 'src/App.tsx', lineNumber: pausedLine, columnNumber: 5 },
-        { id: 'st-2', name: 'processEvent (server.ts:104)', fileId: 'file-2', filePath: 'server.ts', lineNumber: 104, columnNumber: 12 },
-        { id: 'st-3', name: 'anonymous (index.ts:1)', fileId: 'file-3', filePath: 'src/main.tsx', lineNumber: 1, columnNumber: 1 }
-      ]);
-      setActiveStackFrameId('st-1');
-
-      setDebugConsoleLogs((prev) => [
-        ...prev,
-        { id: `dlog-${Date.now()}-2`, type: 'warn', text: `[Debugger] Hit breakpoint at ${activeFile?.path || 'src/App.tsx'}:${pausedLine}. Execution paused.`, time: new Date().toLocaleTimeString() }
-      ]);
-    }, 500);
-  };
-
-  const handlePauseDebug = () => {
-    setDebugStatus('paused');
-    setActiveDebugLine(18);
-  };
-
-  const handleResumeDebug = () => {
-    setDebugStatus('running');
-    setActiveDebugLine(null);
-    setDebugConsoleLogs((prev) => [
-      ...prev,
-      { id: `dlog-${Date.now()}`, type: 'info', text: '[Debugger] Process resumed.', time: new Date().toLocaleTimeString() }
-    ]);
-  };
-
-  const handleStepOver = () => {
-    if (activeDebugLine) {
-      const nextLine = activeDebugLine + 1;
-      setActiveDebugLine(nextLine);
-      setDebugConsoleLogs((prev) => [
-        ...prev,
-        { id: `dlog-${Date.now()}`, type: 'info', text: `[Debugger] Step over -> line ${nextLine}`, time: new Date().toLocaleTimeString() }
-      ]);
+    setDebugStatus('starting');
+    appendDebugLog('info', `[Debugger] Starting ${configObj.name} for ${scriptPath}...`);
+    try {
+      const result = await Platform.launchDebugger({
+        scriptPath,
+        cwd: root,
+        args: configObj.args || []
+      });
+      setDebugSessionId(result.sessionId);
+      setDebugStatus('running');
+      appendDebugLog('info', `[Debugger] Session ${result.sessionId} launched on inspector port ${result.port}.`);
+    } catch (error) {
+      setDebugStatus('stopped');
+      appendDebugLog('error', `[Debugger] ${error instanceof Error ? error.message : String(error)}`);
+      onAddToast('error', 'Debugger could not be started.');
     }
   };
 
-  const handleStepInto = () => {
-    if (activeDebugLine) {
-      const nextLine = activeDebugLine + 2;
-      setActiveDebugLine(nextLine);
-      setDebugConsoleLogs((prev) => [
-        ...prev,
-        { id: `dlog-${Date.now()}`, type: 'info', text: `[Debugger] Step into function call -> line ${nextLine}`, time: new Date().toLocaleTimeString() }
-      ]);
-    }
+  const handlePauseDebug = async () => {
+    if (!debugSessionId) return;
+    const ok = await Platform.controlDebugger(debugSessionId, 'pause');
+    if (!ok) appendDebugLog('error', '[Debugger] Pause request was not accepted.');
   };
 
-  const handleStepOut = () => {
-    setActiveDebugLine(null);
-    setDebugStatus('running');
-    setDebugConsoleLogs((prev) => [
-      ...prev,
-      { id: `dlog-${Date.now()}`, type: 'info', text: '[Debugger] Step out of current stack frame.', time: new Date().toLocaleTimeString() }
-    ]);
+  const handleResumeDebug = async () => {
+    if (!debugSessionId) return;
+    const ok = await Platform.controlDebugger(debugSessionId, 'resume');
+    if (!ok) appendDebugLog('error', '[Debugger] Resume request was not accepted.');
   };
 
-  const handleStopDebug = () => {
+  const handleStepOver = async () => {
+    if (!debugSessionId) return;
+    const ok = await Platform.controlDebugger(debugSessionId, 'stepOver');
+    if (!ok) appendDebugLog('error', '[Debugger] Step-over request was not accepted.');
+  };
+
+  const handleStepInto = async () => {
+    if (!debugSessionId) return;
+    const ok = await Platform.controlDebugger(debugSessionId, 'stepInto');
+    if (!ok) appendDebugLog('error', '[Debugger] Step-into request was not accepted.');
+  };
+
+  const handleStepOut = async () => {
+    if (!debugSessionId) return;
+    const ok = await Platform.controlDebugger(debugSessionId, 'stepOut');
+    if (!ok) appendDebugLog('error', '[Debugger] Step-out request was not accepted.');
+  };
+
+  const handleStopDebug = async () => {
+    if (debugSessionId) await Platform.controlDebugger(debugSessionId, 'stop');
+    setDebugSessionId(null);
     setDebugStatus('stopped');
     setActiveDebugLine(null);
     setVariableScopes([]);
     setCallStack([]);
-    setDebugConsoleLogs((prev) => [
-      ...prev,
-      { id: `dlog-${Date.now()}`, type: 'info', text: '[Debugger] Process terminated.', time: new Date().toLocaleTimeString() }
-    ]);
+    setActiveStackFrameId(null);
+    appendDebugLog('info', '[Debugger] Session stopped.');
   };
+
+  useEffect(() => {
+    const offOutput = Platform.onDebuggerOutput((data) => {
+      if (debugSessionId && data.sessionId !== debugSessionId) return;
+      appendDebugLog(data.type === 'stderr' ? 'error' : 'info', data.data.trimEnd());
+    });
+    const offEvent = Platform.onDebuggerEvent((data) => {
+      if (debugSessionId && data.sessionId !== debugSessionId) return;
+      if (data.event === 'paused') {
+        setDebugStatus('paused');
+        const callFrames = Array.isArray(data.details?.callFrames) ? data.details.callFrames : [];
+        const top = callFrames[0];
+        const line = typeof top?.location?.lineNumber === 'number' ? top.location.lineNumber + 1 : null;
+        setActiveDebugLine(line);
+        setCallStack(callFrames.map((frame: any, index: number) => ({
+          id: `${data.sessionId}-frame-${index}`,
+          name: frame.functionName || '(anonymous)',
+          fileId: frame.url || '',
+          filePath: frame.url || '',
+          lineNumber: typeof frame.location?.lineNumber === 'number' ? frame.location.lineNumber + 1 : 1,
+          columnNumber: typeof frame.location?.columnNumber === 'number' ? frame.location.columnNumber + 1 : 1
+        })));
+        setActiveStackFrameId(callFrames.length ? `${data.sessionId}-frame-0` : null);
+        appendDebugLog('warn', `[Debugger] Paused${line ? ` at line ${line}` : ''}.`);
+      } else if (data.event === 'resumed') {
+        setDebugStatus('running');
+        setActiveDebugLine(null);
+      } else if (data.event === 'terminated') {
+        setDebugStatus('stopped');
+        setDebugSessionId(null);
+        setActiveDebugLine(null);
+        appendDebugLog('info', `[Debugger] Process terminated with exit code ${data.details?.exitCode ?? 0}.`);
+      }
+    });
+    return () => { offOutput(); offEvent(); };
+  }, [debugSessionId]);
 
   const handleToggleBreakpointAtLine = (lineNumber: number) => {
     const curPath = activeFile?.path || 'src/App.tsx';
@@ -560,61 +533,57 @@ export default function CodeWorkspace({
     }
   };
 
-  const handleEvalDebugExpression = (expr: string) => {
+  const handleEvalDebugExpression = async (expr: string) => {
     const time = new Date().toLocaleTimeString();
-    setDebugConsoleLogs((prev) => [
-      ...prev,
-      { id: `dlog-eval-${Date.now()}`, type: 'eval', text: expr, time }
-    ]);
-
+    setDebugConsoleLogs((prev) => [...prev, { id: `dlog-eval-${Date.now()}`, type: 'eval', text: expr, time }]);
+    if (!debugSessionId) {
+      appendDebugLog('error', '[Debugger] No active debugger session.');
+      return;
+    }
     try {
-      let evaluatedResult: string;
-      if (expr === 'activeFile') evaluatedResult = JSON.stringify(activeFile ? activeFile.name : null);
-      else if (expr === 'userName') evaluatedResult = JSON.stringify(userName);
-      else if (expr === 'files') evaluatedResult = `Array(${files.length}) [${files.slice(0, 3).map(f => f.name).join(', ')}...]`;
-      else if (expr === '2 + 2') evaluatedResult = '4';
-      else {
-        evaluatedResult = String(Function(`"use strict"; return (${expr})`)());
-      }
-
-      setDebugConsoleLogs((prev) => [
-        ...prev,
-        { id: `dlog-res-${Date.now()}`, type: 'result', text: evaluatedResult, time: new Date().toLocaleTimeString() }
-      ]);
-    } catch (err: any) {
-      setDebugConsoleLogs((prev) => [
-        ...prev,
-        { id: `dlog-err-${Date.now()}`, type: 'error', text: `Evaluation Error: ${err?.message || String(err)}`, time: new Date().toLocaleTimeString() }
-      ]);
+      const result = await Platform.evaluateDebugger(debugSessionId, expr);
+      appendDebugLog('result', typeof result === 'string' ? result : JSON.stringify(result));
+    } catch (error) {
+      appendDebugLog('error', `Evaluation Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
-  // Test Runner Action Handlers
-  const handleRunAllTests = () => {
+  // Test Runner Action Handlers — always execute the real project test command.
+  const handleRunAllTests = async () => {
+    if (!Platform.isElectron) {
+      onAddToast('info', 'Running project tests requires the LivePad Desktop Edition.');
+      return;
+    }
+    if (isTesting) return;
     setIsTesting(true);
-    setTestSuites((prev) =>
-      prev.map((suite) => ({
-        ...suite,
-        status: 'running',
-        cases: suite.cases.map((c) => ({ ...c, status: 'running' }))
-      }))
-    );
-
-    setTimeout(() => {
+    setTestSuites([{ id: 'vitest-run', name: 'Vitest project test run', fileId: '', filePath: '', status: 'running', cases: [] }]);
+    setSelectedTestCaseId(null);
+    setCoverageReport({ overall: { statementsPct: 0, branchesPct: 0, functionsPct: 0, linesPct: 0 }, files: [] });
+    appendDebugLog('info', '[Tests] Running npm test -- --run ...');
+    const processId = `livepad-test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    let offOutput = () => {};
+    let offExit = () => {};
+    offOutput = Platform.onTerminalOutput((data) => {
+      if (data.processId !== processId) return;
+      appendDebugLog(data.type === 'stderr' ? 'error' : 'info', data.data.trimEnd());
+    });
+    offExit = Platform.onTerminalExit((data) => {
+      if (data.processId !== processId) return;
+      offOutput();
+      offExit();
       setIsTesting(false);
-      setTestSuites((prev) =>
-        prev.map((suite) => ({
-          ...suite,
-          status: 'passed',
-          cases: suite.cases.map((c) => ({ ...c, status: 'passed', errorMessage: undefined, durationMs: Math.floor(Math.random() * 30 + 10) }))
-        }))
-      );
-      setCoverageReport((prev) => ({
-        ...prev,
-        overall: { statementsPct: 95, branchesPct: 90, functionsPct: 98, linesPct: 94 }
-      }));
-      onAddToast('success', 'All unit tests passed successfully!');
-    }, 1000);
+      setTestSuites([{ id: 'vitest-run', name: 'Vitest project test run', fileId: '', filePath: '', status: data.code === 0 ? 'passed' : 'failed', cases: [] }]);
+      onAddToast(data.code === 0 ? 'success' : 'error', data.code === 0 ? 'Tests passed.' : `Tests failed with exit code ${data.code}.`);
+    });
+    try {
+      await Platform.executeCommand('npm test -- --run', undefined, processId);
+    } catch (error) {
+      offOutput();
+      offExit();
+      setIsTesting(false);
+      setTestSuites([{ id: 'vitest-run', name: 'Vitest project test run', fileId: '', filePath: '', status: 'failed', cases: [] }]);
+      onAddToast('error', error instanceof Error ? error.message : String(error));
+    }
   };
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -1909,9 +1878,9 @@ export default function CodeWorkspace({
                     onStepOver={handleStepOver}
                     onStepInto={handleStepInto}
                     onStepOut={handleStepOut}
-                    onRestartDebug={() => {
-                      handleStopDebug();
-                      setTimeout(() => handleStartDebug(), 200);
+                    onRestartDebug={async () => {
+                      await handleStopDebug();
+                      await handleStartDebug();
                     }}
                     onStopDebug={handleStopDebug}
                     breakpoints={breakpoints}
@@ -1961,27 +1930,8 @@ export default function CodeWorkspace({
                     onSelectTestCase={(c) => setSelectedTestCaseId(c.id)}
                     onRunAllTests={handleRunAllTests}
                     onRunFailedTests={handleRunAllTests}
-                    onRunSuite={(suiteId) => {
-                      setIsTesting(true);
-                      setTimeout(() => {
-                        setIsTesting(false);
-                        setTestSuites((prev) =>
-                          prev.map((s) => (s.id === suiteId ? { ...s, status: 'passed' } : s))
-                        );
-                      }, 600);
-                    }}
-                    onRunTestCase={(caseId) => {
-                      setIsTesting(true);
-                      setTimeout(() => {
-                        setIsTesting(false);
-                        setTestSuites((prev) =>
-                          prev.map((suite) => ({
-                            ...suite,
-                            cases: suite.cases.map((c) => (c.id === caseId ? { ...c, status: 'passed' } : c))
-                          }))
-                        );
-                      }, 400);
-                    }}
+                    onRunSuite={handleRunAllTests}
+                    onRunTestCase={handleRunAllTests}
                     isTesting={isTesting}
                     showCoverageOverlay={showCoverageOverlay}
                     onToggleCoverageOverlay={() => setShowCoverageOverlay((prev) => !prev)}

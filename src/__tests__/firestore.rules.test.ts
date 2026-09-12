@@ -111,7 +111,7 @@ suite('Firestore security rules', () => {
 
   it('rejects oversized room content', async () => {
     const ctx = testEnv.authenticatedContext('editor');
-    const oversized = 'x'.repeat(1_048_577);
+    const oversized = 'x'.repeat(262_145);
     await assertFails(updateDoc(doc(ctx.firestore(), 'rooms/ROOM1'), { content: oversized, updatedAt: serverTimestamp() }));
   });
 });

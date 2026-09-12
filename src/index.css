@@ -794,3 +794,35 @@ input[type="range"]::-moz-range-thumb {
   .livepad-landing-card { transition: none; }
   .livepad-landing-card:hover { transform: none; }
 }
+
+/* Phase 7 UX/performance foundation. Keep keyboard focus obvious without
+   changing mouse/touch visuals, and pause decorative work when the tab is
+   hidden so background animation never consumes battery in the background. */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid rgb(6 182 212 / 0.85);
+  outline-offset: 2px;
+}
+
+.livepad-background-paused .livepad-bg-orb-1,
+.livepad-background-paused .livepad-bg-orb-2,
+.livepad-background-paused .livepad-bg-orb-3 {
+  animation-play-state: paused;
+}
+
+/* Large, independent UI surfaces can be skipped by the browser until they
+   approach the viewport. Avoid this utility on editors and interactive forms. */
+.livepad-deferred-surface {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 420px;
+}
+
+/* Mobile browser chrome / PWA safe areas. */
+.livepad-safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(*, *::before, *::after) {
+    scroll-behavior: auto !important;
+  }
+}

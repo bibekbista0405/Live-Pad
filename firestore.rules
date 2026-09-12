@@ -67,14 +67,44 @@ service cloud.firestore {
     }
 
     function isAdminByRoomId(roomId) {
-      return isOwnerByRoomId(roomId)
-        || (isMemberByRoomId(roomId)
-          && roomRef(roomId).data.participants[request.auth.uid].keys().hasAny(['role'])
-          && roomRef(roomId).data.participants[request.auth.uid].role == 'admin');
+      return signedIn() && roomExists(roomId) && (
+        roomRef(roomId).data.ownerId == request.auth.uid ||
+        (roomRef(roomId).data.participants is map
+          && roomRef(roomId).data.participants.keys().hasAll([request.auth.uid])
+          && roomRef(roomId).data.participants[request.auth.uid].role == 'admin')
+      );
     }
 
     function isAdminData(data) {
-      return isOwnerData(data) || (isMemberData(data) && data.participants[request.auth.uid].role == 'admin');
+      return signedIn() && (
+        (data.keys().hasAny(['ownerId']) && data.ownerId == request.auth.uid) ||
+        (data.keys().hasAny(['participants'])
+          && data.participants is map
+          && data.participants.keys().hasAll([request.auth.uid])
+          && data.participants[request.auth.uid].role == 'admin')
+      );
+    }
+
+    function canEditData(data) {
+      return signedIn()
+        && data.keys().hasAny(['participants'])
+        && data.participants is map
+        && data.participants.keys().hasAll([request.auth.uid])
+        && data.participants[request.auth.uid].role in [
+          'owner', 'admin', 'editor', 'collaborator', 'teacher',
+          'instructor', 'member', 'developer', 'student'
+        ];
+    }
+
+    function canCommentData(data) {
+      return signedIn()
+        && data.keys().hasAny(['participants'])
+        && data.participants is map
+        && data.participants.keys().hasAll([request.auth.uid])
+        && data.participants[request.auth.uid].role in [
+          'owner', 'admin', 'editor', 'collaborator', 'teacher',
+          'instructor', 'member', 'developer', 'student', 'commenter', 'reviewer'
+        ];
     }
 
     function ownershipFieldsChanged() {
@@ -95,21 +125,11 @@ service cloud.firestore {
     }
 
     function canEditByRoomId(roomId) {
-      return isMemberByRoomId(roomId)
-        && roomRef(roomId).data.participants[request.auth.uid].keys().hasAny(['role'])
-        && roomRef(roomId).data.participants[request.auth.uid].role in [
-          'owner', 'admin', 'editor', 'collaborator', 'teacher',
-          'instructor', 'member', 'developer', 'student'
-        ];
+      return signedIn() && roomExists(roomId) && canEditData(roomRef(roomId).data);
     }
 
     function canCommentByRoomId(roomId) {
-      return isMemberByRoomId(roomId)
-        && roomRef(roomId).data.participants[request.auth.uid].keys().hasAny(['role'])
-        && roomRef(roomId).data.participants[request.auth.uid].role in [
-          'owner', 'admin', 'editor', 'collaborator', 'teacher',
-          'instructor', 'member', 'developer', 'student', 'commenter', 'reviewer'
-        ];
+      return signedIn() && roomExists(roomId) && canCommentData(roomRef(roomId).data);
     }
 
     function validRoom(data) {
@@ -145,47 +165,49 @@ service cloud.firestore {
         && (!data.keys().hasAny(['attachments']) || (data.attachments is list && data.attachments.size() <= 100));
     }
 
+    function validRoomUpdate(existingData, incomingData) {
+      let changed = incomingData.diff(existingData).affectedKeys();
+      return incomingData.keys().hasAll(['content', 'createdAt', 'updatedAt'])
+        && incomingData.content is string
+        && incomingData.content.size() <= 262144
+        && incomingData.createdAt is timestamp
+        && incomingData.updatedAt is timestamp
+        && (!changed.hasAny(['title']) || (incomingData.title is string && incomingData.title.size() <= 256))
+        && (!changed.hasAny(['label']) || (incomingData.label is string && incomingData.label.size() <= 256))
+        && (!changed.hasAny(['attachments']) || (incomingData.attachments is list && incomingData.attachments.size() <= 100))
+        && (!changed.hasAny(['users']) || incomingData.users is map)
+        && (!changed.hasAny(['typingUsers']) || incomingData.typingUsers is map)
+        && (!changed.hasAny(['participants']) || incomingData.participants is map)
+        && (!changed.hasAny(['updatedAt']) || incomingData.updatedAt is timestamp);
+    }
+
     function selfPresenceOnly(existingData, incomingData) {
-      return incomingData.diff(existingData).affectedKeys().hasOnly(['users', 'typingUsers', 'participants'])
-        && (
-          !incomingData.keys().hasAny(['users']) ||
-          (
-            existingData.keys().hasAny(['users']) && existingData.users is map && incomingData.users is map
-            && incomingData.users.diff(existingData.users).affectedKeys().hasOnly([request.auth.uid])
-          )
-        )
-        && (
-          !incomingData.keys().hasAny(['typingUsers']) ||
-          (
-            existingData.keys().hasAny(['typingUsers']) && existingData.typingUsers is map && incomingData.typingUsers is map
-            && incomingData.typingUsers.diff(existingData.typingUsers).affectedKeys().hasOnly([request.auth.uid])
-          )
-        )
-        && (
-          !incomingData.keys().hasAny(['participants']) ||
-          (
-            existingData.keys().hasAny(['participants']) && existingData.participants is map && incomingData.participants is map
-            && incomingData.participants.diff(existingData.participants).affectedKeys().hasOnly([request.auth.uid])
-          )
-        )
-        && selfRoleUnchanged(existingData, incomingData);
+      let changed = incomingData.diff(existingData).affectedKeys();
+      return changed.hasOnly(['users', 'typingUsers', 'participants'])
+        && (!changed.hasAny(['users']) || (
+          existingData.users is map
+          && incomingData.users is map
+          && incomingData.users.diff(existingData.users).affectedKeys().hasOnly([request.auth.uid])
+        ))
+        && (!changed.hasAny(['typingUsers']) || (
+          existingData.typingUsers is map
+          && incomingData.typingUsers is map
+          && incomingData.typingUsers.diff(existingData.typingUsers).affectedKeys().hasOnly([request.auth.uid])
+        ))
+        && (!changed.hasAny(['participants']) || (
+          existingData.participants is map
+          && incomingData.participants is map
+          && incomingData.participants.diff(existingData.participants).affectedKeys().hasOnly([request.auth.uid])
+          && incomingData.participants[request.auth.uid].role == existingData.participants[request.auth.uid].role
+        ));
     }
 
-    function selfRoleUnchanged(existingData, incomingData) {
-      return !incomingData.keys().hasAny(['participants'])
-        || !incomingData.participants.keys().hasAll([request.auth.uid])
-        || !existingData.keys().hasAny(['participants'])
-        || !existingData.participants.keys().hasAll([request.auth.uid])
-        || incomingData.participants[request.auth.uid].role == existingData.participants[request.auth.uid].role;
-    }
-
-    function isPublicSelfJoin(roomId) {
+    function isPublicSelfJoin() {
       return signedIn()
         && resource.data.privacy == 'public'
-        && !isMemberData(resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'users'])
+        && resource.data.participants is map
+        && !resource.data.participants.keys().hasAll([request.auth.uid])
         && request.resource.data.participants is map
-        && request.resource.data.participants.keys().hasAll([request.auth.uid])
         && request.resource.data.participants.diff(resource.data.participants).affectedKeys().hasOnly([request.auth.uid])
         && request.resource.data.participants[request.auth.uid].uid == request.auth.uid
         && request.resource.data.participants[request.auth.uid].role == (
@@ -194,9 +216,9 @@ service cloud.firestore {
         && (
           !request.resource.data.keys().hasAny(['users'])
           || (
-            resource.data.keys().hasAny(['users'])
-            && request.resource.data.users is map
-            && request.resource.data.users.diff(resource.data.users).affectedKeys().hasOnly([request.auth.uid])
+            request.resource.data.users is map
+            && (!resource.data.keys().hasAny(['users'])
+              || request.resource.data.users.diff(resource.data.users).affectedKeys().hasOnly([request.auth.uid]))
           )
         );
     }
@@ -238,28 +260,36 @@ service cloud.firestore {
       // Normal members can edit content/title/label and their own presence.
       // Owners/admins additionally manage members and lifecycle settings.
       allow update: if signedIn()
-        && validRoom(request.resource.data)
         && request.resource.data.createdAt == resource.data.createdAt
         && (
           (
-            (isOwnerData(resource.data) || isAdminData(resource.data) || (isMemberData(resource.data) && resource.data.participants[request.auth.uid].role in ['editor','collaborator','teacher','instructor','member','developer','student']))
+            validRoomUpdate(resource.data, request.resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'content', 'updatedAt', 'title', 'label', 'attachments',
               'users', 'typingUsers', 'participants', 'lastClientId', 'lastTxId'
             ])
             && (
-              selfPresenceOnly(resource.data, request.resource.data)
-              || (
-                request.resource.data.diff(resource.data).affectedKeys().hasAny(['content', 'title', 'label', 'attachments', 'updatedAt', 'lastClientId', 'lastTxId'])
-                && request.resource.data.updatedAt == request.time
+              (
+                (isOwnerData(resource.data) || isAdminData(resource.data) || (
+                  isMemberData(resource.data)
+                  && resource.data.participants[request.auth.uid].role in [
+                    'editor','collaborator','teacher','instructor','member','developer','student'
+                  ]
+                ))
                 && (
-                  !request.resource.data.diff(resource.data).affectedKeys().hasAny(['users', 'typingUsers', 'participants'])
-                  || selfPresenceOnly(resource.data, request.resource.data)
+                  selfPresenceOnly(resource.data, request.resource.data)
+                  || (
+                    request.resource.data.updatedAt == request.time
+                    && (
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['users', 'typingUsers', 'participants'])
+                      || selfPresenceOnly(resource.data, request.resource.data)
+                    )
+                  )
                 )
               )
+              || isPublicSelfJoin()
             )
           )
-          || isPublicSelfJoin(roomId)
           || (
             isAdminData(resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -297,7 +327,13 @@ service cloud.firestore {
       match /history/{historyId} {
         allow get: if isMemberByRoomId(roomId);
         allow list: if isMemberByRoomId(roomId);
-        allow create: if canEditByRoomId(roomId)
+        allow create: if signedIn()
+          && roomExists(roomId)
+          && roomRef(roomId).data.participants is map
+          && roomRef(roomId).data.participants.keys().hasAll([request.auth.uid])
+          && roomRef(roomId).data.participants[request.auth.uid].role in [
+            'owner', 'admin', 'editor', 'collaborator', 'teacher', 'instructor', 'member', 'developer', 'student'
+          ]
           && validHistory(request.resource.data)
           && request.resource.data.updatedAt == request.time;
         allow update, delete: if false;

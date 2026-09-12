@@ -7,7 +7,7 @@
 | Phase 2 — Core Data Architecture | 20% | Complete (implementation baseline) |
 | Phase 3 — Application & State Architecture | 15% | Complete |
 | Phase 4 — Offline + Realtime Collaboration | 15% | Implementation complete — Windows validation pending |
-| Phase 5 — Coding Workspace + Electron | 8% | Planned |
+| Phase 5 — Coding Workspace + Electron | 8% | In progress — hardening |
 | Phase 6 — AI Platform | 5% | Planned |
 | Phase 7 — UX + Performance | 4% | Planned |
 | Phase 8 — Testing + Production | 3% | Planned |

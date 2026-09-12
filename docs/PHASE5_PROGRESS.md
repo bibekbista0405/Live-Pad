@@ -40,3 +40,11 @@ This workspace does not claim validation results until those commands are run ag
 
 The future intro video is intentionally deferred; the current lightweight animation remains the canonical boot experience until a real media asset is available.
 
+
+## Continued Phase 5 hardening — debugger transport
+
+- Native Node debugger now allocates an OS-selected localhost port instead of guessing from a fixed random range.
+- Inspector command request IDs use a monotonic sequence to avoid accidental collisions.
+- Debugger WebSocket close events now clear the session transport reference and notify the renderer of disconnects.
+- Existing workspace-root and renderer ownership checks remain enforced.
+- No simulated debugger state or success path was introduced.

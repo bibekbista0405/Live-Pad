@@ -3,6 +3,7 @@ import { spawn, ChildProcess } from 'child_process';
 import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
+import net from 'net';
 import { assertWorkspacePath, assertWorkspaceRoot } from './workspaceAccess.js';
 
 interface DebugSession {
@@ -22,12 +23,32 @@ const MAX_EXPRESSION_LENGTH = 10_000;
 
 const DEBUGGER_COMMAND_TIMEOUT_MS = 5_000;
 
+let debuggerRequestSequence = 10;
+
+async function allocateDebugPort(): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        server.close();
+        reject(new Error('Unable to allocate debugger port'));
+        return;
+      }
+      const port = address.port;
+      server.close((error) => error ? reject(error) : resolve(port));
+    });
+  });
+}
+
 function sendDebuggerCommand<T = any>(session: DebugSession, method: string, params?: Record<string, unknown>): Promise<T> {
   if (!session.ws || session.ws.readyState !== WebSocket.OPEN) {
     return Promise.reject(new Error('Debugger is not connected'));
   }
 
-  const requestId = Date.now() + Math.floor(Math.random() * 1000);
+  const requestId = debuggerRequestSequence++;
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       session.ws?.off('message', onMessage);
@@ -84,7 +105,7 @@ export function setupDebuggerIPC() {
     const cwd = payload?.cwd ? assertWorkspaceRoot(event.sender.id, payload.cwd) : path.dirname(scriptPath);
     const args = validateArgs(payload?.args || []);
     const sessionId = `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const debugPort = 9229 + Math.floor(Math.random() * 500);
+    const debugPort = await allocateDebugPort();
     const win = BrowserWindow.fromWebContents(event.sender);
 
     return new Promise((resolve, reject) => {
@@ -128,6 +149,14 @@ export function setupDebuggerIPC() {
                       if (win && !win.isDestroyed()) win.webContents.send('debugger:event', { sessionId, event: 'resumed' });
                     }
                   } catch { /* ignore malformed inspector messages */ }
+                });
+                ws.on('close', () => {
+                  if (session.ws === ws) session.ws = undefined;
+                  if (activeSessions.has(sessionId) && session.process.exitCode === null) {
+                    if (win && !win.isDestroyed()) {
+                      win.webContents.send('debugger:event', { sessionId, event: 'disconnected' });
+                    }
+                  }
                 });
                 ws.on('error', (error) => console.error('Debugger WebSocket error:', error));
               } catch (error) {

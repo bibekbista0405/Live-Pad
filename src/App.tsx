@@ -4203,6 +4203,21 @@ console.warn("Verify your variables before deployment!");
                 Real-time Collaboration. Infinite Expression.
               </p>
 
+              {/* PWA install CTA — restored on the main landing page when the browser exposes a real install prompt. */}
+              {isInstallable && !isAppInstalled && (
+                <motion.button
+                  type="button"
+                  onClick={handleInstallApp}
+                  whileHover={{ y: -1, scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="mt-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs sm:text-sm font-extrabold tracking-wide shadow-md shadow-cyan-500/15 transition-colors cursor-pointer"
+                  title="Install LivePad as an app"
+                >
+                  <Download className="w-4 h-4" />
+                  Install LivePad App
+                </motion.button>
+              )}
+
               {/* Offline disclaimer if Firebase is absent */}
               {!isFirebaseConfigured && (
                 <div className="p-3 w-full max-w-2xl rounded-2xl border border-amber-200/50 bg-amber-50/70 text-amber-900/95 dark:border-amber-950/20 dark:bg-amber-950/20 dark:text-amber-200/95 backdrop-blur-md flex gap-2.5 text-xs text-left leading-relaxed">

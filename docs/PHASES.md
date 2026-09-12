@@ -25,3 +25,8 @@ for safe incremental migration.
 ## Phase 5 implementation status
 
 Phase 5 is complete. The desktop baseline, real execution boundaries, and acceptance criteria are documented in `docs/PHASE5_CODING_WORKSPACE_ELECTRON.md`.
+
+
+## Post-Phase 7 product stabilization
+- Code Studio Learning + Collaboration Pass 2 complete
+- Phase 8 remains planned and intentionally not started

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './code/code-workspace.css';
 import { motion, AnimatePresence } from 'motion/react';
-import Editor, { OnMount } from '@monaco-editor/react';
+import Editor from '@monaco-editor/react';
 import JSZip from 'jszip';
 import {
   Play,
@@ -71,10 +71,9 @@ import RecycleBinModal from './code/RecycleBinModal';
 import ProjectManagerModal from './code/ProjectManagerModal';
 import MonacoEditorWrapper from './code/MonacoEditorWrapper';
 import ErrorBoundary from './ErrorBoundary';
-import { AICopilotPanel } from './code/AICopilotPanel';
 import InteractiveTerminal from './code/InteractiveTerminal';
 import SearchFilesModal from './code/SearchFilesModal';
-import DebugPanel from './code/DebugPanel';
+import CodeRunPanel from './code/CodeRunPanel';
 import TestExplorerPanel from './code/TestExplorerPanel';
 import ExtensionMarketplacePanel from './code/ExtensionMarketplacePanel';
 import { OutlineView } from './code/OutlineView';
@@ -83,8 +82,7 @@ import { ProfileSelectorModal } from './code/ProfileSelectorModal';
 import { CloudWorkspacePanel } from './code/CloudWorkspacePanel';
 import { GitHubPanel } from './code/GitHubPanel';
 import { WorkspaceAdminPanel } from './code/WorkspaceAdminPanel';
-import { WorkspaceKnowledgePanel } from './code/WorkspaceKnowledgePanel';
-import { ProjectDashboardPanel } from './code/ProjectDashboardPanel';
+import { CodeLearningPanel } from './code/CodeLearningPanel';
 import { LiveSessionBar } from './collaboration/LiveSessionBar';
 import { languageService } from '../services/languageService';
 import { projectIndexEngine } from '../services/projectIndexEngine';
@@ -103,7 +101,7 @@ import {
 } from '../types/debug';
 import { DebugConsoleLog } from './code/InteractiveTerminal';
 import { VoicePanel } from './collaboration/VoicePanel';
-import { ChatPanel, FloatingChatTrigger } from './collaboration/ChatPanel';
+import { ChatPanel } from './collaboration/ChatPanel';
 import { CommentsPanel } from './collaboration/CommentsPanel';
 import { getLanguageFromExtension, getFileBoilerplate } from '../utils/languageSupport';
 
@@ -129,8 +127,9 @@ import {
   loadLocalProjectData,
   saveFileVersionHistoryLocal
 } from '../services/indexedDBService';
-import { ensureAuth } from '../lib/firebase';
+import { ensureAuth, auth, db } from '../lib/firebase';
 import { Platform } from '../platform';
+import { collection, addDoc, deleteDoc, doc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import {
   subscribeToWorkspaceProjects,
   subscribeToProjectStructure,
@@ -178,48 +177,18 @@ interface CodeWorkspaceProps {
 const DEFAULT_PROJECT_A: CodingProject = {
   id: 'proj-default-1',
   workspaceId: 'default-workspace',
-  name: 'Portfolio Website',
-  description: 'Interactive portfolio app with HTML, CSS, JS.',
+  name: 'My First Website',
+  description: 'A simple HTML, CSS and JavaScript learning project.',
   createdAt: Date.now(),
   updatedAt: Date.now(),
-  createdBy: 'LivePad User',
+  createdBy: '',
   activeFileId: 'file-1',
   openFileIds: ['file-1', 'file-2', 'file-3'],
   pinnedFileIds: ['file-1']
 };
 
-const DEFAULT_FOLDERS: ProjectFolder[] = [
-  {
-    id: 'folder-src',
-    projectId: 'proj-default-1',
-    name: 'src',
-    parentId: null,
-    path: 'src',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    isExpanded: true
-  },
-  {
-    id: 'folder-components',
-    projectId: 'proj-default-1',
-    name: 'components',
-    parentId: 'folder-src',
-    path: 'src/components',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    isExpanded: true
-  },
-  {
-    id: 'folder-ui',
-    projectId: 'proj-default-1',
-    name: 'ui',
-    parentId: 'folder-components',
-    path: 'src/components/ui',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    isExpanded: true
-  }
-];
+const DEFAULT_FOLDERS: ProjectFolder[] = [];
+
 
 const DEFAULT_FILES: ProjectFile[] = [
   {
@@ -251,8 +220,8 @@ const DEFAULT_FILES: ProjectFile[] = [
 </html>`,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    createdBy: 'LivePad User',
-    updatedBy: 'LivePad User',
+    createdBy: '',
+    updatedBy: '',
     version: 1,
     isPinned: true
   },
@@ -304,8 +273,8 @@ button {
 }`,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    createdBy: 'LivePad User',
-    updatedBy: 'LivePad User',
+    createdBy: '',
+    updatedBy: '',
     version: 1
   },
   {
@@ -324,8 +293,8 @@ button.addEventListener('click', () => {
 });`,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    createdBy: 'LivePad User',
-    updatedBy: 'LivePad User',
+    createdBy: '',
+    updatedBy: '',
     version: 1
   }
 ];
@@ -374,9 +343,70 @@ export default function CodeWorkspace({
 
   // Collaboration Comment Threads State
   const [commentThreads, setCommentThreads] = useState<any[]>([]);
+  const [commentContext, setCommentContext] = useState<{ lineNumber?: number; selectedText?: string }>({});
+  const commentReplyUnsubsRef = useRef<Map<string, () => void>>(new Map());
+  const [resolvedUserUid, setResolvedUserUid] = useState(auth?.currentUser?.uid || '');
+  const currentUserUid = resolvedUserUid;
+  const currentUserName = userName?.trim() || auth?.currentUser?.displayName || auth?.currentUser?.email?.split('@')[0] || '';
+
+  useEffect(() => {
+    let cancelled = false;
+    void ensureAuth().then((user) => {
+      if (!cancelled && user?.uid) setResolvedUserUid(user.uid);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Code comments are workspace collaboration data, not local component state.
+  // Subscribe to the room and each thread's replies so every participant sees updates live.
+  useEffect(() => {
+    if (!roomCode || !db || !currentUserUid) {
+      setCommentThreads([]);
+      return;
+    }
+
+    const commentsRef = collection(db, 'rooms', roomCode, 'comments');
+    const commentsQuery = query(commentsRef, orderBy('timestamp', 'desc'), limit(100));
+    const unsubscribeReplies = commentReplyUnsubsRef.current;
+
+    const unsubscribeComments = onSnapshot(commentsQuery, (snapshot) => {
+      const nextThreads = snapshot.docs.map((snapshotDoc) => ({
+        id: snapshotDoc.id,
+        ...snapshotDoc.data(),
+        replies: []
+      }));
+      setCommentThreads(nextThreads);
+
+      const liveIds = new Set(nextThreads.map((thread) => thread.id));
+      unsubscribeReplies.forEach((unsubscribe, threadId) => {
+        if (!liveIds.has(threadId)) {
+          unsubscribe();
+          unsubscribeReplies.delete(threadId);
+        }
+      });
+
+      nextThreads.forEach((thread) => {
+        if (unsubscribeReplies.has(thread.id)) return;
+        const repliesRef = collection(db, 'rooms', roomCode, 'comments', thread.id, 'replies');
+        const repliesQuery = query(repliesRef, orderBy('timestamp', 'asc'), limit(50));
+        const unsubscribe = onSnapshot(repliesQuery, (replySnapshot) => {
+          const replies = replySnapshot.docs.map((replyDoc) => ({ id: replyDoc.id, ...replyDoc.data() }));
+          setCommentThreads((current) => current.map((item) => item.id === thread.id ? { ...item, replies } : item));
+        });
+        unsubscribeReplies.set(thread.id, unsubscribe);
+      });
+    }, (error) => {
+      console.warn('[LivePad Comments] Realtime listener unavailable', error);
+    });
+
+    return () => {
+      unsubscribeComments();
+      unsubscribeReplies.forEach((unsubscribe) => unsubscribe());
+      unsubscribeReplies.clear();
+    };
+  }, [roomCode, currentUserUid]);
 
   // Floating Workspace Chat State
-  const [isFloatingChatOpen, setIsFloatingChatOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   // Debugger State
@@ -807,11 +837,10 @@ export default function CodeWorkspace({
     return defaultValue;
   };
 
+  const initialActivityTab = getInitialLayoutSetting<ActivityBarTab>('activityBarTab', 'explorer');
+  const allowedActivityTabs: ActivityBarTab[] = ['explorer', 'knowledge', 'run', 'testing', 'chat', 'comments', 'admin', 'trash'];
   const [activityBarTab, setActivityBarTab] = useState<ActivityBarTab>(
-    getInitialLayoutSetting('activityBarTab', 'explorer')
-  );
-  const [isAIPanelOpen, setIsAIPanelOpen] = useState<boolean>(
-    getInitialLayoutSetting('isAIPanelOpen', false)
+    allowedActivityTabs.includes(initialActivityTab) ? initialActivityTab : 'explorer'
   );
   const [isTerminalOpen, setIsTerminalOpen] = useState<boolean>(
     getInitialLayoutSetting('isTerminalOpen', false)
@@ -872,9 +901,6 @@ export default function CodeWorkspace({
       } else if (modifier && e.key.toLowerCase() === 'j') {
         e.preventDefault();
         setIsTerminalOpen((prev) => !prev);
-      } else if (modifier && e.key.toLowerCase() === 'i') {
-        e.preventDefault();
-        setIsAIPanelOpen((prev) => !prev);
       }
     };
 
@@ -973,7 +999,6 @@ export default function CodeWorkspace({
       localStorage.setItem(
         LAYOUT_STORAGE_KEY,
         JSON.stringify({
-          isAIPanelOpen,
           isTerminalOpen,
           isPreviewOpen,
           rightSidebarOpen,
@@ -982,7 +1007,7 @@ export default function CodeWorkspace({
         })
       );
     } catch (e) {}
-  }, [isAIPanelOpen, isTerminalOpen, isPreviewOpen, rightSidebarOpen, leftSidebarOpen, activityBarTab]);
+  }, [isTerminalOpen, isPreviewOpen, rightSidebarOpen, leftSidebarOpen, activityBarTab]);
   const [isAutoReload, setIsAutoReload] = useState<boolean>(true);
   const [devicePreset, setDevicePreset] = useState<DevicePreset>('desktop');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
@@ -1794,9 +1819,9 @@ export default function CodeWorkspace({
     const timeStr = new Date().toLocaleTimeString();
     setConsoleLogs((prev) => [
       ...prev,
-      { id: `log-${Date.now()}`, type: 'system', message: `▶ Running ${activeFile.name}...`, timestamp: timeStr }
+      { id: `log-${Date.now()}`, type: 'system', message: `▶ Preview updated for ${activeFile.name}`, timestamp: timeStr }
     ]);
-    onAddToast('success', `${activeFile.name} executed cleanly.`);
+    onAddToast('success', `Preview updated for ${activeFile.name}.`);
   };
 
   const handleOpenExternalWindow = () => {
@@ -1811,6 +1836,23 @@ export default function CodeWorkspace({
       onAddToast('error', 'Pop-up blocked. Please allow pop-ups for LivePad.');
     }
   };
+
+  const openCodeDiscussion = useCallback(() => {
+    const editor = editorRef.current;
+    let lineNumber: number | undefined;
+    let selectedText: string | undefined;
+    if (editor) {
+      const position = editor.getPosition?.();
+      const selection = editor.getSelection?.();
+      lineNumber = selection?.startLineNumber || position?.lineNumber;
+      if (selection && !selection.isEmpty?.()) {
+        selectedText = editor.getModel?.()?.getValueInRange(selection)?.trim();
+      }
+    }
+    setCommentContext({ lineNumber, selectedText });
+    setActivityBarTab('comments');
+    setLeftSidebarOpen(true);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -1995,10 +2037,11 @@ export default function CodeWorkspace({
                     onClose={() => setLeftSidebarOpen(false)}
                     roomId={roomCode}
                     activeUsers={activeUsers}
-                    currentUid={userName}
+                    currentUid={currentUserUid}
                     userName={userName}
                     currentRole={userRole}
                     isFloating={false}
+                    onUnreadCountChange={setUnreadChatCount}
                     onInsertCodeToEditor={(snippet) => {
                       if (activeFile) {
                         handleEditorChange(activeFile.content + '\n' + snippet);
@@ -2012,7 +2055,7 @@ export default function CodeWorkspace({
                     onClose={() => setLeftSidebarOpen(false)}
                     roomId={roomCode}
                     activeUsers={activeUsers}
-                    currentUid={userName}
+                    currentUid={currentUserUid}
                     userName={userName}
                     currentRole={userRole}
                   />
@@ -2022,111 +2065,80 @@ export default function CodeWorkspace({
                     onClose={() => setLeftSidebarOpen(false)}
                     fileId={activeFileId || undefined}
                     filePath={activeFile?.path}
+                    activeLineNumber={commentContext.lineNumber}
+                    selectedText={commentContext.selectedText}
                     threads={commentThreads}
-                    onAddThread={(newThread) => {
-                      const created = {
-                        ...newThread,
-                        id: `comment-${Date.now()}`,
-                        timestamp: Date.now(),
-                        replies: []
-                      };
-                      setCommentThreads((prev) => [created, ...prev]);
+                    onAddThread={async (newThread) => {
+                      if (!roomCode || !db || !currentUserUid || !currentUserName) {
+                        onAddToast('error', 'Set your real profile name before adding a comment.');
+                        return;
+                      }
+                      try {
+                        await addDoc(collection(db, 'rooms', roomCode, 'comments'), {
+                          ...newThread,
+                          authorUid: currentUserUid,
+                          authorName: currentUserName,
+                          authorRole: userRole,
+                          timestamp: Date.now(),
+                          status: 'open'
+                        });
+                      } catch (error) {
+                        console.warn('[LivePad Comments] Failed to create thread', error);
+                        onAddToast('error', 'Comment could not be posted. Check your connection and permissions.');
+                      }
                     }}
-                    onAddReply={(threadId, text) => {
-                      setCommentThreads((prev) =>
-                        prev.map((t) => {
-                          if (t.id === threadId) {
-                            return {
-                              ...t,
-                              replies: [
-                                ...t.replies,
-                                {
-                                  id: `reply-${Date.now()}`,
-                                  authorUid: userName,
-                                  authorName: userName,
-                                  authorRole: userRole,
-                                  text,
-                                  timestamp: Date.now()
-                                }
-                              ]
-                            };
-                          }
-                          return t;
-                        })
-                      );
+                    onAddReply={async (threadId, text) => {
+                      if (!roomCode || !db || !currentUserUid || !currentUserName) return;
+                      try {
+                        await addDoc(collection(db, 'rooms', roomCode, 'comments', threadId, 'replies'), {
+                          authorUid: currentUserUid,
+                          authorName: currentUserName,
+                          authorRole: userRole,
+                          text,
+                          timestamp: Date.now()
+                        });
+                      } catch (error) {
+                        console.warn('[LivePad Comments] Failed to create reply', error);
+                        onAddToast('error', 'Reply could not be posted.');
+                      }
                     }}
-                    onToggleResolveThread={(threadId) => {
-                      setCommentThreads((prev) =>
-                        prev.map((t) =>
-                          t.id === threadId
-                            ? { ...t, status: t.status === 'open' ? 'resolved' : 'open' }
-                            : t
-                        )
-                      );
+                    onToggleResolveThread={async (threadId) => {
+                      if (!roomCode || !db) return;
+                      const thread = commentThreads.find((item) => item.id === threadId);
+                      if (!thread) return;
+                      try {
+                        await updateDoc(doc(db, 'rooms', roomCode, 'comments', threadId), {
+                          status: thread.status === 'open' ? 'resolved' : 'open'
+                        });
+                      } catch (error) {
+                        console.warn('[LivePad Comments] Failed to update thread', error);
+                        onAddToast('error', 'Comment status could not be updated.');
+                      }
                     }}
-                    onDeleteThread={(threadId) => {
-                      setCommentThreads((prev) => prev.filter((t) => t.id !== threadId));
+                    onDeleteThread={async (threadId) => {
+                      if (!roomCode || !db) return;
+                      try {
+                        await deleteDoc(doc(db, 'rooms', roomCode, 'comments', threadId));
+                      } catch (error) {
+                        console.warn('[LivePad Comments] Failed to delete thread', error);
+                        onAddToast('error', 'Comment could not be deleted.');
+                      }
                     }}
-                    currentUid={userName}
-                    userName={userName}
+                    currentUid={currentUserUid}
+                    userName={currentUserName}
                     currentRole={userRole}
                   />
                 ) : activityBarTab === 'run' ? (
-                  <DebugPanel
-                    debugStatus={debugStatus}
-                    runConfigurations={runConfigurations}
-                    activeConfigId={activeConfigId}
-                    onSelectConfig={setActiveConfigId}
-                    onStartDebug={handleStartDebug}
-                    onPauseDebug={handlePauseDebug}
-                    onResumeDebug={handleResumeDebug}
-                    onStepOver={handleStepOver}
-                    onStepInto={handleStepInto}
-                    onStepOut={handleStepOut}
-                    onRestartDebug={async () => {
-                      await handleStopDebug();
-                      await handleStartDebug();
+                  <CodeRunPanel
+                    activeFile={activeFile}
+                    isPreviewOpen={isPreviewOpen}
+                    isTeachingSession={isTeachingSession}
+                    onRun={handleRunCode}
+                    onOpenPreview={() => {
+                      setIsPreviewOpen(true);
+                      setLayoutPreset('split-50');
+                      setSplitRatio(50);
                     }}
-                    onStopDebug={handleStopDebug}
-                    breakpoints={breakpoints}
-                    onToggleBreakpoint={(id) => {
-                      setBreakpoints((prev) =>
-                        prev.map((b) => (b.id === id ? { ...b, enabled: !b.enabled } : b))
-                      );
-                    }}
-                    onRemoveBreakpoint={(id) => {
-                      setBreakpoints((prev) => prev.filter((b) => b.id !== id));
-                    }}
-                    onAddBreakpointByLine={(filePath, lineNumber) => {
-                      const f = files.find((file) => file.path === filePath);
-                      const created: Breakpoint = {
-                        id: `bp-${Date.now()}`,
-                        fileId: f ? f.id : 'file-1',
-                        filePath,
-                        lineNumber,
-                        enabled: true
-                      };
-                      setBreakpoints((prev) => [...prev, created]);
-                    }}
-                    variableScopes={variableScopes}
-                    watchExpressions={watchExpressions}
-                    onAddWatchExpression={(expr) => {
-                      const created: WatchExpression = {
-                        id: `watch-${Date.now()}`,
-                        expression: expr,
-                        value: 'evaluating...'
-                      };
-                      setWatchExpressions((prev) => [...prev, created]);
-                      setTimeout(() => {
-                        handleEvalDebugExpression(expr);
-                      }, 200);
-                    }}
-                    onRemoveWatchExpression={(id) => {
-                      setWatchExpressions((prev) => prev.filter((w) => w.id !== id));
-                    }}
-                    callStack={callStack}
-                    activeStackFrameId={activeStackFrameId}
-                    onSelectStackFrame={(frame) => setActiveStackFrameId(frame.id)}
                   />
                 ) : activityBarTab === 'testing' ? (
                   <TestExplorerPanel
@@ -2149,9 +2161,13 @@ export default function CodeWorkspace({
                 ) : activityBarTab === 'admin' ? (
                   <WorkspaceAdminPanel />
                 ) : activityBarTab === 'knowledge' ? (
-                  <WorkspaceKnowledgePanel />
-                ) : activityBarTab === 'dashboard' ? (
-                  <ProjectDashboardPanel />
+                  <CodeLearningPanel
+                    files={files}
+                    activeFile={activeFile}
+                    onSelectFile={handleSelectFile}
+                    isTeachingSession={isTeachingSession}
+                    isTeacher={isTeachingSession && canControlCodeMode}
+                  />
                 ) : activityBarTab === 'extensions' ? (
                   <ExtensionMarketplacePanel
                     onAddToast={onAddToast}
@@ -2223,10 +2239,10 @@ export default function CodeWorkspace({
               >
                 {/* Editor Container */}
                 <div className="flex flex-col h-full min-w-0 relative overflow-hidden">
-                  <LiveSessionBar onOpenComments={() => {
-                    setActivityBarTab('comments');
-                    setLeftSidebarOpen(true);
-                  }} />
+                  <LiveSessionBar
+                    activeUsers={activeUsers}
+                    isTeacher={isTeachingSession && canControlCodeMode}
+                    onOpenComments={openCodeDiscussion} />
                   {/* File Tabs Bar */}
                   <FileTabsBar
                     openFiles={openFiles}
@@ -2423,18 +2439,7 @@ export default function CodeWorkspace({
                 )}
               </div>
 
-              {/* Right Sidebar: AI Copilot Panel */}
-              <AICopilotPanel
-                isOpen={isAIPanelOpen}
-                onClose={() => setIsAIPanelOpen(false)}
-                activeFile={activeFile}
-                allFiles={files}
-                onApplyCodeToEditor={(newCode) => {
-                  if (activeFile) handleEditorChange(newCode);
-                }}
-                onAddToast={onAddToast}
-              />
-            </div>
+              </div>
 
             {/* Bottom Panel: Interactive Terminal */}
             <InteractiveTerminal
@@ -2490,8 +2495,6 @@ export default function CodeWorkspace({
           activeUsersCount={activeUsers.length}
           isTerminalOpen={isTerminalOpen}
           onToggleTerminal={() => setIsTerminalOpen(!isTerminalOpen)}
-          isAIPanelOpen={isAIPanelOpen}
-          onToggleAIPanel={() => setIsAIPanelOpen(!isAIPanelOpen)}
           isSyncing={!!syncError}
         />
 
@@ -2586,18 +2589,36 @@ export default function CodeWorkspace({
             onAddToast('info', `Switched project.`);
           }}
           onCreateProject={(name, template) => {
+            const projectId = `proj-${Date.now()}`;
+            const now = Date.now();
             const newProj: CodingProject = {
-              id: `proj-${Date.now()}`,
+              id: projectId,
               workspaceId,
               name,
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-              createdBy: userName || 'collaborator'
+              description: 'HTML, CSS and JavaScript learning project.',
+              createdAt: now,
+              updatedAt: now,
+              createdBy: currentUserUid,
+              activeFileId: `${projectId}-html`,
+              openFileIds: [`${projectId}-html`, `${projectId}-css`, `${projectId}-js`],
+              pinnedFileIds: [`${projectId}-html`]
             };
+            const starterFiles: ProjectFile[] = [
+              { ...DEFAULT_FILES[0], id: `${projectId}-html`, projectId, createdAt: now, updatedAt: now, createdBy: currentUserUid, updatedBy: currentUserUid, isPinned: true },
+              { ...DEFAULT_FILES[1], id: `${projectId}-css`, projectId, createdAt: now, updatedAt: now, createdBy: currentUserUid, updatedBy: currentUserUid, isPinned: false },
+              { ...DEFAULT_FILES[2], id: `${projectId}-js`, projectId, createdAt: now, updatedAt: now, createdBy: currentUserUid, updatedBy: currentUserUid, isPinned: false }
+            ];
             setProjects((prev) => [...prev, newProj]);
-            saveProjectDoc(workspaceId, newProj);
-            setActiveProjectId(newProj.id);
-            onAddToast('success', `Created project ${name}`);
+            setActiveProjectId(projectId);
+            setFiles(starterFiles);
+            setFolders([]);
+            setTrash([]);
+            setActiveFileId(`${projectId}-html`);
+            setOpenFileIds(starterFiles.map((file) => file.id));
+            setSelectedIds([`${projectId}-html`]);
+            void saveProjectDoc(workspaceId, newProj);
+            starterFiles.forEach((file) => { void saveProjectFileDoc(workspaceId, projectId, file); });
+            onAddToast('success', `Created ${name} with HTML, CSS and JavaScript.`);
           }}
           onRenameProject={(pId, newName) => {
             setProjects((prev) =>
@@ -2660,35 +2681,6 @@ export default function CodeWorkspace({
           onClose={() => setIsProfileModalOpen(false)}
         />
 
-        {/* Floating Real-Time Workspace Chat Panel */}
-        <ChatPanel
-          isOpen={isFloatingChatOpen}
-          onClose={() => setIsFloatingChatOpen(false)}
-          roomId={roomCode}
-          activeUsers={activeUsers}
-          currentUid={userName}
-          userName={userName}
-          currentRole={userRole}
-          isFloating={true}
-          onInsertCodeToEditor={(snippet) => {
-            if (activeFile) {
-              handleEditorChange(activeFile.content + '\n' + snippet);
-            }
-          }}
-          onAddToast={onAddToast}
-          onUnreadCountChange={(count) => setUnreadChatCount(count)}
-        />
-
-        {/* Floating Chat Trigger Launcher Button */}
-        <FloatingChatTrigger
-          isOpen={isFloatingChatOpen}
-          onToggle={() => {
-            setIsFloatingChatOpen(!isFloatingChatOpen);
-            if (!isFloatingChatOpen) setUnreadChatCount(0);
-          }}
-          unreadCount={unreadChatCount}
-          activeUsersCount={activeUsers.length || 1}
-        />
       </motion.div>
     </AnimatePresence>
   </ErrorBoundary>

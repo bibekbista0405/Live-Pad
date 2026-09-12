@@ -865,3 +865,60 @@ input[type="range"]::-moz-range-thumb {
   .livepad-landing-panel { transition: none; }
   .livepad-landing-panel:hover { transform: none; }
 }
+
+/* Code Studio learning/collaboration surfaces: quiet, compact, and task-focused. */
+.livepad-live-session-bar {
+  background: #181818;
+  border-color: #2d2d2d;
+  color: rgb(226 232 240 / 0.9);
+}
+.livepad-live-session-bar > div:first-child > span:first-child {
+  color: rgb(103 232 249 / 0.95);
+}
+.livepad-live-session-comment-btn {
+  color: rgb(165 243 252 / 0.9);
+  background: rgb(8 145 178 / 0.08);
+  border-color: rgb(8 145 178 / 0.28);
+}
+.livepad-live-session-comment-btn:hover {
+  background: rgb(8 145 178 / 0.16);
+  border-color: rgb(34 211 238 / 0.42);
+}
+.livepad-comments-panel {
+  background: #181818;
+  color: rgb(226 232 240 / 0.94);
+  border: 1px solid #303030;
+}
+.livepad-comments-panel > div {
+  border-color: #2d2d2d;
+}
+.livepad-comments-panel textarea,
+.livepad-comments-panel input {
+  background: #111111;
+  border-color: #333333;
+}
+.livepad-comments-panel textarea:focus,
+.livepad-comments-panel input:focus {
+  border-color: rgb(34 211 238 / 0.55);
+  box-shadow: 0 0 0 2px rgb(34 211 238 / 0.08);
+}
+
+.livepad-chat-panel {
+  --chat-border: #303030;
+  --chat-surface: #181818;
+  --chat-muted: rgb(255 255 255 / 0.42);
+}
+.livepad-chat-panel .backdrop-blur-md,
+.livepad-chat-panel .backdrop-blur-lg,
+.livepad-chat-panel .backdrop-blur-xl,
+.livepad-chat-panel .backdrop-blur-2xl {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.livepad-chat-panel form input:focus {
+  border-color: rgb(34 211 238 / 0.55);
+  box-shadow: 0 0 0 2px rgb(34 211 238 / 0.08);
+}
+.livepad-chat-panel .group:hover .opacity-0 {
+  opacity: 1;
+}

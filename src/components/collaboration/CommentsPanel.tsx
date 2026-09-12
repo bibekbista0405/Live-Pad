@@ -13,7 +13,6 @@ import {
   Filter,
   User
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { WorkspaceRole } from '../../types';
 
 export interface CommentReply {
@@ -94,7 +93,7 @@ export function CommentsPanel({
       lineNumber: activeLineNumber,
       highlightedText: selectedText,
       authorUid: currentUid,
-      authorName: userName || 'Collaborator',
+      authorName: userName,
       authorRole: currentRole,
       text: newCommentText.trim(),
       status: 'open'
@@ -114,7 +113,7 @@ export function CommentsPanel({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed right-4 top-16 bottom-16 z-40 w-80 md:w-96 bg-slate-900 dark:bg-zinc-900 border border-slate-700/80 dark:border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100">
+    <div className="livepad-comments-panel fixed right-4 top-16 bottom-16 z-40 w-80 md:w-96 rounded-xl shadow-2xl flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-3 bg-slate-950/80 dark:bg-black/50 border-b border-slate-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -123,9 +122,9 @@ export function CommentsPanel({
           </div>
           <div>
             <h3 className="text-xs font-bold flex items-center gap-1.5">
-              Code & Document Comments
+              Code discussion
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">
-                {threads.length} Threads
+                {threads.length} open threads
               </span>
             </h3>
             <p className="text-[10px] text-slate-400 truncate max-w-[200px]">
@@ -179,7 +178,7 @@ export function CommentsPanel({
         <textarea
           value={newCommentText}
           onChange={(e) => setNewCommentText(e.target.value)}
-          placeholder="Ask a question, suggest a code change, or leave feedback..."
+          placeholder="Ask a question or explain what should change..."
           className="w-full h-16 bg-slate-900 border border-slate-700/80 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none"
         />
 
@@ -189,7 +188,7 @@ export function CommentsPanel({
             disabled={!newCommentText.trim()}
             className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5"
           >
-            <Send className="w-3.5 h-3.5" /> Post Thread
+            <Send className="w-3.5 h-3.5" /> Post comment
           </button>
         </div>
       </form>
@@ -198,7 +197,7 @@ export function CommentsPanel({
       <div className="flex-1 overflow-y-auto p-3 space-y-3 font-sans text-xs custom-scrollbar">
         {filteredThreads.length === 0 ? (
           <div className="text-center text-slate-500 italic py-8 text-xs">
-            No comment threads matching filter.
+            No comments here yet.
           </div>
         ) : (
           filteredThreads.map((thread) => {
@@ -231,17 +230,19 @@ export function CommentsPanel({
                   </div>
 
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => onToggleResolveThread(thread.id)}
-                      title={isResolved ? 'Re-open thread' : 'Mark thread resolved'}
-                      className={`p-1 rounded-md transition-colors ${
-                        isResolved
-                          ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
-                          : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'
-                      }`}
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                    </button>
+                    {(thread.authorUid === currentUid || currentRole === 'owner' || currentRole === 'admin' || currentRole === 'teacher') && (
+                      <button
+                        onClick={() => onToggleResolveThread(thread.id)}
+                        title={isResolved ? 'Re-open thread' : 'Mark thread resolved'}
+                        className={`p-1 rounded-md transition-colors ${
+                          isResolved
+                            ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                            : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
+                    )}
 
                     {(thread.authorUid === currentUid || currentRole === 'owner' || currentRole === 'admin') && (
                       <button
@@ -295,7 +296,7 @@ export function CommentsPanel({
                           handleCreateReply(thread.id);
                         }
                       }}
-                      placeholder="Reply to thread..."
+                      placeholder="Reply..."
                       className="flex-1 bg-slate-900 border border-slate-700/60 rounded-lg px-2.5 py-1 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none"
                     />
                     <button

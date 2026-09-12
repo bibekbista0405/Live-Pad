@@ -155,15 +155,6 @@ const PersonalWorkspaceView = lazy(() => import('./components/CategoryViews/Pers
 const TeamCollaborationView = lazy(() => import('./components/CategoryViews/TeamCollaborationView'));
 const ConflictResolutionModal = lazy(() => import('./components/ConflictResolutionModal').then(m => ({ default: m.default || m.ConflictResolutionModal })));
 
-// Word generators for fallback anonymous usernames
-const ADJECTIVES = ['Creative', 'Cooperating', 'Swift', 'Lucid', 'Focused', 'Curious', 'Wandering', 'Bold', 'Bright', 'Clever', 'Agile'];
-const NOUNS = ['Scribe', 'Caster', 'Hacker', 'Scribbler', 'Thinker', 'Typist', 'Designer', 'Scholar', 'Poet', 'Author'];
-const getRandomDefaultName = () => {
-  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
-  return `${adj} ${noun}`;
-};
-
 const ROOM_LABELS = [
   { name: 'Work', bg: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/35 bg-blue-500/10 dark:bg-blue-500/20', dotBg: 'bg-blue-500' },
   { name: 'Personal', bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/35 bg-emerald-500/10 dark:bg-emerald-500/20', dotBg: 'bg-emerald-500' },
@@ -2567,7 +2558,7 @@ export default function App() {
     workspaceStatus,
     codeModeOpen,
     setCodeModeOpen
-  } = useLiveRoom(roomCode, userName || getRandomDefaultName());
+  } = useLiveRoom(roomCode, userName || auth?.currentUser?.displayName || auth?.currentUser?.email?.split('@')[0] || '');
 
   const isTeachingSession = workspaceType === 'teaching';
   const isTeacher = currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'owner';
@@ -3715,7 +3706,12 @@ console.warn("Verify your variables before deployment!");
     e.preventDefault();
     setIsCreatingRoom(true);
 
-    const finalName = nameInput.trim() || getRandomDefaultName();
+    const finalName = nameInput.trim() || auth?.currentUser?.displayName || auth?.currentUser?.email?.split('@')[0] || '';
+    if (!finalName) {
+      addToast('error', 'Enter your real name before creating a workspace.');
+      setIsCreatingRoom(false);
+      return;
+    }
     localStorage.setItem('livepad_username', finalName);
     setUserName(finalName);
     setEditedName(finalName);
@@ -3863,7 +3859,12 @@ console.warn("Verify your variables before deployment!");
 
     setIsVerifyingRoom(true);
 
-    const finalName = nameInput.trim() || getRandomDefaultName();
+    const finalName = nameInput.trim() || auth?.currentUser?.displayName || auth?.currentUser?.email?.split('@')[0] || '';
+    if (!finalName) {
+      addToast('error', 'Enter your real name before joining a workspace.');
+      setIsVerifyingRoom(false);
+      return;
+    }
     localStorage.setItem('livepad_username', finalName);
     setUserName(finalName);
     setEditedName(finalName);
@@ -7631,7 +7632,7 @@ console.warn("Verify your variables before deployment!");
             {/* Real-Time Workspace Chat Panel Drawer */}
             <Suspense fallback={null}>
             <ChatPanel
-              isOpen={isFloatingChatOpen}
+              isOpen={isFloatingChatOpen && !isCodeMode}
               onClose={() => setIsFloatingChatOpen(false)}
               roomId={roomCode || 'private-pad'}
               activeUsers={activeUsers}
@@ -7953,7 +7954,7 @@ console.warn("Verify your variables before deployment!");
                   updatedAt: serverTimestamp(),
                   expiresAt,
                   ownerId: uid,
-                  ownerName: userName || 'Bibek',
+                  ownerName: userName || '',
                   createdBy: uid,
                   creatorId: uid,
                   creatorRole: 'owner',
@@ -7961,7 +7962,7 @@ console.warn("Verify your variables before deployment!");
                   participants: {
                     [uid]: {
                       uid,
-                      name: userName || 'Bibek',
+                      name: userName || '',
                       role: 'owner',
                       joinedAt: Date.now()
                     }

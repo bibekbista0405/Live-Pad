@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Plus, Trash2, Edit2, Copy, Check, X, ArrowRight, Sparkles, FolderCode } from 'lucide-react';
+import { Plus, Trash2, Edit2, Copy, Check, X, ArrowRight, FolderCode, Globe2 } from 'lucide-react';
 import { CodingProject } from '../../types/code';
 
 interface ProjectManagerModalProps {
@@ -15,9 +15,7 @@ interface ProjectManagerModalProps {
 }
 
 const TEMPLATES = [
-  { id: 'web-starter', name: 'Web Starter (HTML/CSS/JS)', desc: 'Standard front-end web application with interactive controls.' },
-  { id: 'react-like', name: 'Interactive App (JS Modules)', desc: 'Modular JavaScript application layout.' },
-  { id: 'python-algo', name: 'Python Sandbox', desc: 'Python scripts & algorithm playground.' }
+  { id: 'web-starter', name: 'Web foundations', desc: 'HTML for structure, CSS for style, and JavaScript for behavior.' }
 ];
 
 export default function ProjectManagerModal({
@@ -55,18 +53,18 @@ export default function ProjectManagerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-[999] bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 select-none">
+      <div className="w-full max-w-3xl bg-[#101820] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="px-6 py-4 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between shrink-0">
+        <div className="px-5 py-4 bg-[#0d141c] border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
-              <FolderCode className="w-5 h-5" />
+              <Globe2 className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-black text-white">Workspace Coding Projects</h2>
+              <h2 className="text-sm font-black text-white">Your coding projects</h2>
               <p className="text-[11px] text-slate-400 font-mono">
-                Isolated coding environments within this LivePad workspace.
+                Simple projects for learning and building on the web.
               </p>
             </div>
           </div>
@@ -99,7 +97,7 @@ export default function ProjectManagerModal({
             <form onSubmit={handleCreateSubmit} className="p-4 rounded-2xl bg-slate-950/80 border border-cyan-500/40 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider">
-                  Create New Project
+                  New web project
                 </span>
                 <button
                   type="button"
@@ -123,7 +121,7 @@ export default function ProjectManagerModal({
               </div>
 
               <div>
-                <label className="text-[10px] font-mono text-slate-400 block mb-1">Starter Template</label>
+                <label className="text-[10px] font-mono text-slate-400 block mb-1">Start with</label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {TEMPLATES.map((tmpl) => (
                     <button
@@ -163,7 +161,7 @@ export default function ProjectManagerModal({
 
           <div className="space-y-2">
             <span className="text-[10px] font-mono font-black uppercase text-slate-400 tracking-wider">
-              Existing Projects ({projects.length})
+              Projects ({projects.length})
             </span>
 
             <div className="space-y-2">

@@ -326,6 +326,49 @@ service cloud.firestore {
       // Workspace deletion is intentionally a soft-delete operation.
       allow delete: if false;
 
+      // Live code discussion. Threads and replies are separate documents so a
+      // student can reply to a teacher's thread without rewriting the parent.
+      match /comments/{commentId} {
+        allow get, list: if canCommentByRoomId(roomId);
+        allow create: if canCommentByRoomId(roomId)
+          && request.resource.data.keys().hasAll(['authorUid', 'authorName', 'text', 'timestamp', 'status'])
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.authorName is string
+          && request.resource.data.authorName.size() >= 1
+          && request.resource.data.authorName.size() <= 128
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 20000
+          && request.resource.data.timestamp is number
+          && request.resource.data.status == 'open';
+        allow update: if canCommentByRoomId(roomId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+          && request.resource.data.status in ['open', 'resolved']
+          && (resource.data.authorUid == request.auth.uid
+              || isAdminByRoomId(roomId)
+              || (roomRef(roomId).data.participants is map
+                  && roomRef(roomId).data.participants.keys().hasAll([request.auth.uid])
+                  && roomRef(roomId).data.participants[request.auth.uid].role == 'teacher'));
+        allow delete: if canCommentByRoomId(roomId)
+          && (resource.data.authorUid == request.auth.uid || isAdminByRoomId(roomId));
+
+        match /replies/{replyId} {
+          allow get, list: if canCommentByRoomId(roomId);
+          allow create: if canCommentByRoomId(roomId)
+            && request.resource.data.keys().hasAll(['authorUid', 'authorName', 'text', 'timestamp'])
+            && request.resource.data.authorUid == request.auth.uid
+            && request.resource.data.authorName is string
+            && request.resource.data.authorName.size() >= 1
+            && request.resource.data.authorName.size() <= 128
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1
+            && request.resource.data.text.size() <= 20000
+            && request.resource.data.timestamp is number;
+          allow update, delete: if canCommentByRoomId(roomId)
+            && resource.data.authorUid == request.auth.uid;
+        }
+      }
+
       match /audit_logs/{logId} {
         allow get: if isMemberByRoomId(roomId);
         allow list: if isAdminByRoomId(roomId);

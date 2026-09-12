@@ -70,7 +70,7 @@ export class WorkspaceLibraryService {
       pinned: refData.pinned ?? existingItem?.pinned ?? false,
       archived: refData.archived ?? existingItem?.archived ?? false,
       owner: refData.owner ?? existingItem?.owner ?? (refData.role?.toLowerCase() === 'owner'),
-      ownerName: refData.ownerName || existingItem?.ownerName || 'LivePad User',
+      ownerName: refData.ownerName || existingItem?.ownerName || '',
       ownerId: refData.ownerId || existingItem?.ownerId || uid || '',
       icon: refData.icon || existingItem?.icon || 'FolderKanban',
       syncStatus: refData.syncStatus || 'synced',

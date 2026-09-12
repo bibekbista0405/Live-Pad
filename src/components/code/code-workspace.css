@@ -119,3 +119,188 @@
   background: rgba(34,211,238,.09);
   border-color: rgba(34,211,238,.18);
 }
+
+/* --------------------------------------------------------------------------
+   Code Studio v3 — learning-first product chrome
+   Keep the visual language quiet: editor content is the hero, controls are
+   grouped by task, and collaboration surfaces behave like normal work panels.
+   -------------------------------------------------------------------------- */
+.livepad-code-shell {
+  --lp-bg: #0b1016;
+  --lp-panel: #101720;
+  --lp-panel-raised: #141c26;
+  --lp-panel-soft: #0d141c;
+  --lp-border: rgba(148,163,184,.14);
+  --lp-border-strong: rgba(148,163,184,.23);
+  --lp-text: #edf3f8;
+  --lp-muted: #8492a6;
+  --lp-accent: #38c6df;
+  --lp-accent-soft: rgba(56,198,223,.11);
+}
+.livepad-code-shell * { box-sizing: border-box; }
+.livepad-code-titlebar {
+  min-height: 52px; height: 52px;
+  background: #0d141c;
+  border-bottom: 1px solid var(--lp-border);
+  box-shadow: 0 1px 0 rgba(255,255,255,.02);
+}
+.livepad-code-project-switch {
+  min-height: 34px;
+  background: #131c26;
+  border: 1px solid var(--lp-border);
+  border-radius: 9px;
+}
+.livepad-code-project-switch:hover { background:#17222e; border-color:var(--lp-border-strong); }
+.livepad-code-run-btn {
+  min-height: 34px;
+  background:#1597ae;
+  border:1px solid rgba(103,232,249,.18);
+  border-radius:9px;
+  box-shadow:none;
+}
+.livepad-code-run-btn:hover { background:#1aa8c1; }
+.livepad-code-body { background:#090e14; }
+.livepad-code-activity {
+  width:52px !important;
+  background:#0b1118;
+  border-right:1px solid var(--lp-border) !important;
+}
+.livepad-code-activity-btn { height:44px !important; color:#718096; border-radius:8px; width:42px !important; margin:1px auto; }
+.livepad-code-activity-btn:hover { background:#131b24; color:#e8eef5; }
+.livepad-code-activity-btn.is-active { background:#17212b; color:#f7fbff; }
+.livepad-code-activity-indicator { left:-1px !important; background:var(--lp-accent); box-shadow:none; }
+.livepad-code-sidebar {
+  width:300px !important;
+  background:#0e151d;
+  border-right:1px solid var(--lp-border) !important;
+}
+.livepad-code-sidebar-header { height:44px !important; background:#111922; }
+.livepad-code-sidebar-header > span:first-child { color:#d8e1eb !important; letter-spacing:.08em !important; }
+.livepad-code-sidebar-header > span:last-child { color:#657487 !important; }
+.livepad-code-canvas { background:#0a0f15; }
+.livepad-learning-strip {
+  min-height:44px !important;
+  background:#0d141c;
+  border-bottom:1px solid var(--lp-border);
+}
+.livepad-learning-step { min-width:auto; height:22px; border-radius:6px; color:#7dd3fc; background:var(--lp-accent-soft); border-color:rgba(56,198,223,.18); }
+.livepad-language-chip { min-width:46px; height:28px; border-radius:7px; font-size:10px; }
+.livepad-language-chip.is-active { background:#17242d; border-color:rgba(56,198,223,.25); color:#dffaff; }
+.livepad-code-tabs { background:#0d141c; border-bottom:1px solid var(--lp-border); }
+.livepad-code-tab { background:#101820; border-right:1px solid var(--lp-border); }
+.livepad-code-tab.is-active { background:#0a0f15; border-top:2px solid var(--lp-accent); }
+.livepad-code-statusbar { height:28px !important; min-height:28px; background:#0d141c; border-top:1px solid var(--lp-border); }
+
+/* Collaboration surfaces: no floating-card-on-card look. */
+.livepad-chat-panel,
+.livepad-comments-panel {
+  position:relative !important;
+  inset:auto !important;
+  width:100% !important;
+  max-width:none !important;
+  height:100% !important;
+  max-height:none !important;
+  border:0 !important;
+  border-radius:0 !important;
+  background:#0e151d !important;
+  box-shadow:none !important;
+  backdrop-filter:none !important;
+}
+.livepad-chat-panel .backdrop-blur-md,
+.livepad-chat-panel .backdrop-blur-lg,
+.livepad-comments-panel .backdrop-blur-md { backdrop-filter:none !important; }
+
+/* Re-skin the collaboration message area to a calm discussion feed. */
+.livepad-chat-panel .rounded-\[18px\] { border-radius:10px !important; box-shadow:none !important; }
+.livepad-chat-panel form { background:#0e151d !important; border-color:var(--lp-border) !important; }
+.livepad-chat-panel input { min-height:38px; border-radius:9px !important; box-shadow:none !important; }
+.livepad-chat-panel .space-y-3\.5 > * { margin-top:.65rem; }
+.livepad-chat-panel .bg-gradient-to-r { background:#176f82 !important; }
+.livepad-chat-panel .bg-white\/70 { background:#101820 !important; }
+.livepad-comments-panel > div { border-color:var(--lp-border) !important; }
+.livepad-comments-panel textarea,
+.livepad-comments-panel input { border-radius:9px !important; box-shadow:none !important; }
+.livepad-comments-panel form { background:#101820 !important; }
+.livepad-comments-panel .bg-slate-950\/80,
+.livepad-comments-panel .bg-slate-950\/60,
+.livepad-comments-panel .bg-slate-950\/40 { background:#111922 !important; }
+.livepad-comments-panel .rounded-xl { border-radius:10px !important; }
+
+/* Modal chrome used by Code Studio overlays. */
+.livepad-code-shell + * .fixed.inset-0,
+.livepad-code-shell ~ .fixed.inset-0 { backdrop-filter: blur(6px); }
+
+@media (max-width: 900px) {
+  .livepad-code-sidebar { width:280px !important; }
+  .livepad-code-titlebar { height:48px; min-height:48px; }
+}
+
+/* Clean collaboration UI v2 */
+.livepad-chat-panel { display:flex; flex-direction:column; min-height:0; color:#e7eef5; font-size:12px; }
+.livepad-chat-header { height:56px; min-height:56px; padding:0 14px; display:flex; align-items:center; justify-content:space-between; background:#111a23; border-bottom:1px solid rgba(148,163,184,.12); }
+.livepad-chat-title { display:flex; align-items:center; gap:10px; min-width:0; }
+.livepad-chat-icon { width:30px; height:30px; display:grid; place-items:center; border-radius:8px; color:#7dd3fc; background:rgba(56,198,223,.10); border:1px solid rgba(56,198,223,.14); }
+.livepad-chat-title h2 { margin:0; font-size:12px; font-weight:700; color:#eef5fa; }
+.livepad-chat-title p { margin:3px 0 0; color:#718196; font-size:10px; }
+.livepad-chat-header-actions { display:flex; gap:2px; }
+.livepad-chat-header-actions button,.livepad-chat-composer > button { border:0; background:transparent; color:#718196; width:30px; height:30px; border-radius:7px; display:grid; place-items:center; cursor:pointer; }
+.livepad-chat-header-actions button:hover,.livepad-chat-composer > button:hover { background:#19232d; color:#eaf2f8; }
+.livepad-chat-people { height:34px; min-height:34px; display:flex; align-items:center; gap:6px; padding:0 14px; color:#657487; border-bottom:1px solid rgba(148,163,184,.08); }
+.livepad-chat-people span { width:21px; height:21px; border-radius:6px; display:grid; place-items:center; background:#18232e; border:1px solid rgba(148,163,184,.14); color:#a8d9e3; font-size:8px; font-weight:700; }
+.livepad-chat-people em { font-style:normal; font-size:9px; }
+.livepad-chat-search { margin:8px 10px 0; height:32px; display:flex; align-items:center; gap:7px; padding:0 9px; border:1px solid rgba(148,163,184,.16); background:#0b1118; border-radius:8px; color:#718196; }
+.livepad-chat-search input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:#e7eef5; font-size:11px; }
+.livepad-chat-search button { border:0; background:transparent; color:#718196; cursor:pointer; }
+.livepad-chat-offline { margin:8px 10px 0; padding:7px 9px; border-radius:7px; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.15); color:#d6a64b; display:flex; gap:7px; align-items:center; font-size:10px; }
+.livepad-chat-messages { flex:1; min-height:0; overflow-y:auto; padding:14px 12px 18px; scrollbar-width:thin; }
+.livepad-chat-message { display:flex; gap:9px; align-items:flex-start; margin-bottom:15px; }
+.livepad-chat-message.is-self { flex-direction:row-reverse; }
+.livepad-chat-avatar { flex:0 0 28px; width:28px; height:28px; border-radius:8px; display:grid; place-items:center; background:#17232e; border:1px solid rgba(148,163,184,.14); color:#b9dbe3; font-size:9px; font-weight:700; }
+.livepad-chat-message-main { max-width:calc(100% - 37px); min-width:0; }
+.livepad-chat-message.is-self .livepad-chat-message-main { display:flex; flex-direction:column; align-items:flex-end; }
+.livepad-chat-meta { display:flex; align-items:center; gap:6px; color:#69788b; font-size:9px; margin-bottom:4px; }
+.livepad-chat-meta strong { color:#cbd6e1; font-size:10px; }
+.livepad-chat-meta span { padding:1px 5px; border-radius:4px; background:#18232e; color:#7dd3fc; text-transform:capitalize; }
+.livepad-chat-meta time { color:#556477; }
+.livepad-chat-bubble { max-width:100%; padding:9px 10px; border:1px solid rgba(148,163,184,.12); background:#131c25; border-radius:10px; color:#d8e1e9; line-height:1.5; }
+.livepad-chat-message.is-self .livepad-chat-bubble { background:#12323a; border-color:rgba(56,198,223,.18); }
+.livepad-chat-bubble p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.livepad-chat-tools { display:flex; gap:3px; margin-top:4px; opacity:.0; transition:opacity .12s ease; }
+.livepad-chat-message:hover .livepad-chat-tools,.livepad-chat-message:focus-within .livepad-chat-tools { opacity:1; }
+.livepad-chat-tools button { border:0; background:transparent; color:#657487; font-size:9px; padding:3px 5px; border-radius:5px; display:flex; align-items:center; gap:3px; cursor:pointer; }
+.livepad-chat-tools button:hover,.livepad-chat-tools button.active { background:#17242e; color:#8bd7e4; }
+.livepad-chat-reply-preview { display:block; width:100%; text-align:left; border:0; border-left:2px solid #39a9bd; background:#0d171e; color:#8498aa; padding:5px 7px; margin-bottom:6px; font-size:9px; cursor:pointer; border-radius:0 5px 5px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.livepad-chat-snippet { margin-top:7px; border:1px solid rgba(148,163,184,.12); background:#0a1016; border-radius:7px; overflow:hidden; }
+.livepad-chat-snippet > div { padding:5px 7px; color:#718196; border-bottom:1px solid rgba(148,163,184,.10); font-size:9px; display:flex; gap:5px; align-items:center; }
+.livepad-chat-snippet pre { margin:0; padding:8px; max-height:180px; overflow:auto; font:10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:#bcd0dc; }
+.livepad-chat-snippet button { margin:0 7px 7px; border:1px solid rgba(56,198,223,.18); background:#10242b; color:#7dd3fc; border-radius:6px; padding:5px 7px; font-size:9px; cursor:pointer; }
+.livepad-chat-edit textarea,.livepad-chat-snippet-composer textarea { width:100%; min-height:58px; resize:vertical; border:1px solid rgba(148,163,184,.16); background:#0a1016; color:#e7eef5; border-radius:7px; padding:7px; outline:0; font:11px/1.45 inherit; }
+.livepad-chat-edit div { display:flex; justify-content:flex-end; gap:5px; margin-top:5px; }
+.livepad-chat-edit button { border:1px solid rgba(148,163,184,.14); background:#16212b; color:#b9c7d3; border-radius:6px; padding:4px 7px; font-size:9px; cursor:pointer; }
+.livepad-chat-edit button:last-child { background:#176f82; color:white; border-color:#2b91a6; }
+.livepad-chat-composer-context { margin:0 10px 7px; padding:7px 8px; border-left:2px solid #39a9bd; background:#101a22; color:#8191a2; display:flex; align-items:center; gap:6px; font-size:9px; }
+.livepad-chat-composer-context span { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.livepad-chat-composer-context button { border:0; background:transparent; color:#718196; cursor:pointer; }
+.livepad-chat-snippet-composer { padding:7px 10px; border-top:1px solid rgba(148,163,184,.10); background:#0d141c; display:grid; gap:6px; }
+.livepad-chat-snippet-composer select { width:max-content; background:#141e28; color:#aebdca; border:1px solid rgba(148,163,184,.14); border-radius:6px; font-size:9px; padding:4px 6px; }
+.livepad-chat-composer { display:flex; align-items:center; gap:6px; padding:9px 10px; background:#101820; border-top:1px solid rgba(148,163,184,.12); }
+.livepad-chat-composer input { flex:1; min-width:0; height:36px; border:1px solid rgba(148,163,184,.15); background:#0b1118; color:#e7eef5; border-radius:8px; padding:0 10px; outline:0; font-size:11px; }
+.livepad-chat-composer input:focus { border-color:rgba(56,198,223,.38); box-shadow:0 0 0 2px rgba(56,198,223,.07); }
+.livepad-chat-composer > button.active { color:#7dd3fc; background:#12313a; }
+.livepad-chat-composer > button.send { width:34px; background:#176f82; color:#fff; }
+.livepad-chat-composer > button.send:disabled { opacity:.35; cursor:not-allowed; }
+.livepad-chat-empty { min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; color:#657487; gap:6px; padding:25px; }
+.livepad-chat-empty > div { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; background:#131e28; border:1px solid rgba(148,163,184,.12); color:#71889a; }
+.livepad-chat-empty strong { color:#c4d0db; font-size:11px; }
+.livepad-chat-empty span { max-width:220px; font-size:10px; line-height:1.5; }
+.livepad-floating-chat-trigger { display:none !important; }
+
+/* Comment threads: compact review-style discussion, not a floating modal. */
+.livepad-comments-panel { color:#e7eef5 !important; }
+.livepad-comments-panel > div:first-child { height:56px; min-height:56px; padding:0 14px !important; background:#111a23 !important; }
+.livepad-comments-panel > div:first-child h3 { font-size:12px !important; }
+.livepad-comments-panel form { padding:10px !important; border-bottom:1px solid rgba(148,163,184,.10) !important; }
+.livepad-comments-panel form textarea { min-height:72px; height:72px; background:#0b1118 !important; color:#e7eef5 !important; border:1px solid rgba(148,163,184,.15) !important; }
+.livepad-comments-panel form button[type="submit"] { background:#176f82 !important; border-radius:7px !important; box-shadow:none !important; }
+.livepad-comments-panel > div:last-child { padding:10px !important; }
+.livepad-comments-panel > div:last-child > div { background:#111922 !important; border:1px solid rgba(148,163,184,.12) !important; border-radius:10px !important; }

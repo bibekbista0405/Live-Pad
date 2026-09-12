@@ -152,4 +152,39 @@ suite('Firestore security rules', () => {
     const oversized = 'x'.repeat(262_145);
     await assertFails(updateDoc(doc(ctx.firestore(), 'rooms/ROOM1'), { content: oversized, updatedAt: serverTimestamp() }));
   });
+
+  it('allows live code comments and replies while blocking spoofed authors', async () => {
+    const teacher = testEnv.authenticatedContext('teacher');
+    const student = testEnv.authenticatedContext('student');
+    const stranger = testEnv.authenticatedContext('stranger');
+
+    const created = await addDoc(collection(teacher.firestore(), 'rooms/TEACHING1/comments'), {
+      fileId: 'file-1',
+      filePath: 'index.html',
+      lineNumber: 8,
+      authorUid: 'teacher',
+      authorName: 'Real Teacher',
+      text: 'What does this element do?',
+      status: 'open',
+      timestamp: Date.now(),
+    });
+
+    await assertSucceeds(addDoc(collection(student.firestore(), `rooms/TEACHING1/comments/${created.id}/replies`), {
+      authorUid: 'student',
+      authorName: 'Real Student',
+      text: 'It adds the page heading.',
+      timestamp: Date.now(),
+    }));
+
+    await assertFails(addDoc(collection(student.firestore(), 'rooms/TEACHING1/comments'), {
+      authorUid: 'teacher',
+      authorName: 'Real Teacher',
+      text: 'Spoofed author',
+      status: 'open',
+      timestamp: Date.now(),
+    }));
+
+    await assertFails(updateDoc(doc(student.firestore(), 'rooms/TEACHING1/comments', created.id), { status: 'resolved' }));
+    await assertFails(getDocs(collection(stranger.firestore(), 'rooms/TEACHING1/comments')));
+  });
 });

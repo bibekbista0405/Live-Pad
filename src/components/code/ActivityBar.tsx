@@ -11,7 +11,6 @@ import {
   Trash2,
   Settings,
   FolderGit2,
-  LayoutDashboard,
   BookOpen
 } from 'lucide-react';
 
@@ -42,8 +41,6 @@ const primaryTabs: Array<{ id: ActivityBarTab; label: string; icon: React.Elemen
 
 const teacherTabs: Array<{ id: ActivityBarTab; label: string; icon: React.ElementType; title: string }> = [
   { id: 'admin', label: 'Class', icon: GraduationCap, title: 'Class controls & members' },
-  { id: 'knowledge', label: 'Lessons', icon: BookOpen, title: 'Lesson resources' },
-  { id: 'dashboard', label: 'Progress', icon: LayoutDashboard, title: 'Class/project progress' },
 ];
 
 export function ActivityBar({

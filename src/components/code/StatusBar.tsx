@@ -4,7 +4,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Terminal,
-  Sparkles,
   Users,
   Wifi,
   Clock
@@ -16,8 +15,6 @@ interface StatusBarProps {
   activeUsersCount?: number;
   isTerminalOpen: boolean;
   onToggleTerminal: () => void;
-  isAIPanelOpen: boolean;
-  onToggleAIPanel: () => void;
   isSyncing?: boolean;
 }
 
@@ -26,8 +23,6 @@ export function StatusBar({
   activeUsersCount = 1,
   isTerminalOpen,
   onToggleTerminal,
-  isAIPanelOpen,
-  onToggleAIPanel,
   isSyncing = false
 }: StatusBarProps) {
   const lineCount = activeFile?.content ? activeFile.content.split('\n').length : 1;
@@ -98,17 +93,6 @@ export function StatusBar({
           <span className="hidden sm:inline">Terminal</span>
         </button>
 
-        <button
-          type="button"
-          onClick={onToggleAIPanel}
-          className={`px-1.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
-            isAIPanelOpen ? 'is-active font-bold' : ''
-          }`}
-          title="Toggle AI Copilot (Ctrl+I)"
-        >
-          <Sparkles className="w-3 h-3" />
-          <span className="hidden sm:inline">Copilot</span>
-        </button>
       </div>
     </footer>
   );

@@ -1,4 +1,4 @@
-import * as React from 'react';
+import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Code2, RotateCcw } from 'lucide-react';
 
@@ -15,14 +15,20 @@ interface State {
 }
 
 /** Application-safe React error boundary. Keeps the shell alive when a feature crashes. */
-export class ErrorBoundary extends React.Component<Props, State> {
+export class ErrorBoundary extends Component<Props, State> {
+  public declare readonly props: Readonly<Props>;
+  public declare readonly setState: (
+    state: State | Partial<State> | ((prevState: Readonly<State>, props: Readonly<Props>) => State | Partial<State>),
+    callback?: () => void,
+  ) => void;
+
   public state: State = {
     hasError: false,
     error: null,
     errorInfo: null,
   };
 
-  public static getDerivedStateFromError(error: Error): Partial<State> {
+  public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error, errorInfo: null };
   }
 

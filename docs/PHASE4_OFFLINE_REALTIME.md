@@ -19,6 +19,14 @@ Status: **implementation complete, validation pending on the user's Windows envi
 
 LivePad keeps the existing anti-rubber-band typing lock and last-write metadata. A remote snapshot received while the user is actively typing updates collaboration metadata without replacing the local editor buffer. This avoids cursor/content jumps while preserving the remote version for the next synchronization cycle.
 
+## Chat and sandbox hardening
+
+- Chat persistence now uses a durable outbox when Firestore is temporarily unavailable.
+- Message edits and reactions persist to Firestore when the message has a server id.
+- New messages start with only the sender as read; client visibility drives read receipts.
+- JavaScript code executes in an opaque-origin sandboxed iframe rather than the LivePad renderer.
+- The sandbox blocks network access through CSP and exposes console/runtime events through `postMessage`.
+
 ## Remaining validation gate
 
 Run on Windows:

@@ -32,9 +32,10 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserPresence, WorkspaceRole } from '../../types';
-import { collection, addDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db, isFirestoreQuotaExhausted, markQuotaExhausted } from '../../lib/firebase';
 import { playMentionChime, isUserMentioned } from '../../utils/soundAlert';
+import { chatOutbox } from '../../sync/chatOutbox';
 
 export interface ChatMessage {
   id: string;
@@ -362,32 +363,26 @@ export function ChatPanel({
     setEditingText('');
   };
 
-  const handleSaveEdit = (msgId: string) => {
+  const handleSaveEdit = async (msgId: string) => {
     if (!editingText.trim()) return;
     const newText = editingText.trim();
+    const target = messages.find((message) => message.id === msgId);
+    if (!target || target.senderUid !== currentUid) return;
 
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (m.id !== msgId) return m;
-        return {
-          ...m,
-          text: newText,
-          isEdited: true
-        };
-      })
-    );
+    setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, text: newText, isEdited: true } : m));
+    channelRef.current?.postMessage({ type: 'EDIT_CHAT_MESSAGE', msgId, newText });
 
-    if (channelRef.current) {
-      channelRef.current.postMessage({
-        type: 'EDIT_CHAT_MESSAGE',
-        msgId,
-        newText
-      });
+    if (roomId && db && !isFirestoreQuotaExhausted() && !msgId.startsWith('msg_')) {
+      try {
+        await updateDoc(doc(db, 'rooms', roomId, 'messages', msgId), { text: newText, isEdited: true, editedAt: Date.now() });
+      } catch (error) {
+        console.warn('[LivePad Chat] Failed to persist message edit', error);
+      }
     }
 
     setEditingMsgId(null);
     setEditingText('');
-    if (onAddToast) onAddToast('success', 'Message updated');
+    onAddToast?.('success', 'Message updated');
   };
 
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
@@ -439,6 +434,27 @@ export function ChatPanel({
       if (onUnreadCountChange) onUnreadCountChange(0);
     }
   }, [messages, isMinimized, isOpen, currentUid]);
+
+  const flushChatOutbox = async () => {
+    if (!roomId || !db || isFirestoreQuotaExhausted()) return;
+    const pending = chatOutbox.list(roomId);
+    for (const item of pending) {
+      try {
+        await addDoc(collection(db, 'rooms', roomId, 'messages'), item.data);
+        chatOutbox.remove(item.clientKey);
+      } catch (error) {
+        console.warn('[LivePad Chat] Outbox flush paused', error);
+        break;
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleOnline = () => { void flushChatOutbox(); };
+    window.addEventListener('online', handleOnline);
+    if (navigator.onLine) void flushChatOutbox();
+    return () => window.removeEventListener('online', handleOnline);
+  }, [roomId]);
 
   // Setup Real-time Chat Sync (Firestore & BroadcastChannel)
   useEffect(() => {
@@ -690,8 +706,7 @@ export function ChatPanel({
     setMentionMenu(null);
 
     // Auto mark read by other active users in room if online
-    const otherActiveUids = activeUsers.filter((u) => u.uid !== currentUid).map((u) => u.uid);
-    const initialReadBy = Array.from(new Set([currentUid, ...otherActiveUids]));
+    const initialReadBy = [currentUid];
 
     const replyToData = replyingToMessage
       ? {
@@ -748,9 +763,7 @@ export function ChatPanel({
 
     // Firestore save
     if (roomId && db && !isFirestoreQuotaExhausted()) {
-      try {
-        const messagesRef = collection(db, 'rooms', roomId, 'messages');
-        await addDoc(messagesRef, {
+      const messageData = {
           senderUid: newMsg.senderUid,
           senderName: newMsg.senderName,
           senderRole: newMsg.senderRole || 'member',
@@ -759,39 +772,43 @@ export function ChatPanel({
           type: newMsg.type,
           ...(newMsg.replyTo ? { replyTo: newMsg.replyTo } : {}),
           ...(newMsg.codeSnippet ? { codeSnippet: newMsg.codeSnippet } : {})
-        });
+      };
+      try {
+        const messagesRef = collection(db, 'rooms', roomId, 'messages');
+        await addDoc(messagesRef, messageData);
       } catch (err) {
         if (String(err).includes('resource-exhausted') || String(err).includes('Quota')) {
           markQuotaExhausted();
         } else {
-          console.warn('Failed to persist chat message to Firestore', err);
+          chatOutbox.enqueue({ roomId, clientKey: newMsg.clientKey || newMsg.id, data: messageData, queuedAt: Date.now() });
+          console.warn('[LivePad Chat] Message queued locally until the cloud connection recovers', err);
         }
       }
     }
   };
 
-  const handleToggleReaction = (msgId: string, emoji: string) => {
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (m.id !== msgId) return m;
-        const reactions = m.reactions ? { ...m.reactions } : {};
-        const list = reactions[emoji] ? [...reactions[emoji]] : [];
-        if (list.includes(currentUid)) {
-          reactions[emoji] = list.filter((u) => u !== currentUid);
-        } else {
-          reactions[emoji] = [...list, currentUid];
-        }
-        return { ...m, reactions };
-      })
-    );
+  const handleToggleReaction = async (msgId: string, emoji: string) => {
+    const target = messages.find((message) => message.id === msgId);
+    if (!target || target.type === 'system') return;
 
-    if (channelRef.current) {
-      channelRef.current.postMessage({
-        type: 'MESSAGE_REACTION',
-        msgId,
-        emoji,
-        uid: currentUid
-      });
+    let nextReactions: Record<string, string[]> = {};
+    setMessages((prev) => prev.map((m) => {
+      if (m.id !== msgId) return m;
+      const reactions = m.reactions ? { ...m.reactions } : {};
+      const list = reactions[emoji] ? [...reactions[emoji]] : [];
+      reactions[emoji] = list.includes(currentUid) ? list.filter((u) => u !== currentUid) : [...list, currentUid];
+      if (reactions[emoji].length === 0) delete reactions[emoji];
+      nextReactions = reactions;
+      return { ...m, reactions };
+    }));
+
+    channelRef.current?.postMessage({ type: 'MESSAGE_REACTION', msgId, emoji, uid: currentUid });
+    if (roomId && db && !isFirestoreQuotaExhausted() && !msgId.startsWith('msg_')) {
+      try {
+        await updateDoc(doc(db, 'rooms', roomId, 'messages', msgId), { reactions: nextReactions });
+      } catch (error) {
+        console.warn('[LivePad Chat] Failed to persist reaction', error);
+      }
     }
   };
 
@@ -805,7 +822,7 @@ export function ChatPanel({
         id: `clear-${Date.now()}`,
         senderUid: 'system',
         senderName: 'System',
-        text: 'Chat history cleared by local user.',
+        text: 'Chat view cleared locally. Cloud chat history is unchanged.',
         timestamp: Date.now(),
         type: 'system'
       }
@@ -1387,7 +1404,7 @@ export function ChatPanel({
                 type="button"
                 onClick={handleClearChat}
                 className="text-slate-400 hover:text-rose-500 transition-colors p-0.5"
-                title="Clear Chat History"
+                title="Clear local chat view"
               >
                 <Trash2 className="w-3 h-3" />
               </button>

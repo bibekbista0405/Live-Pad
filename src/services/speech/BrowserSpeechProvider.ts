@@ -63,12 +63,12 @@ export class BrowserSpeechProvider implements ISpeechProvider {
     recognition.onresult = (event: any) => {
       let interimTranscript = '';
       let finalTranscript = '';
-      let maxConfidence = 0.95;
+      let maxConfidence = 0;
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const result = event.results[i];
         const transcriptChunk = result[0]?.transcript || '';
-        const conf = result[0]?.confidence || 0.88;
+        const conf = typeof result[0]?.confidence === 'number' ? result[0].confidence : 0;
         if (conf > 0) maxConfidence = conf;
 
         if (result.isFinal) {
@@ -86,14 +86,16 @@ export class BrowserSpeechProvider implements ISpeechProvider {
         if (processedInterim) processedInterim = applySmartPunctuation(processedInterim, this.options.language);
       }
 
-      // Generate simulated word confidence array
+      // Browser SpeechRecognition exposes confidence at the result level, not
+      // reliably per word. Keep that real value for each token instead of
+      // inventing random confidence scores.
       const words: WordConfidence[] = (processedFinal || processedInterim)
         .split(' ')
         .filter(Boolean)
         .map((w) => ({
           word: w,
-          confidence: Math.max(0.65, Math.min(0.99, maxConfidence + (Math.random() * 0.1 - 0.05))),
-          isLowConfidence: maxConfidence < (this.options?.confidenceThreshold || 0.8)
+          confidence: maxConfidence,
+          isLowConfidence: maxConfidence > 0 && maxConfidence < (this.options?.confidenceThreshold || 0.8)
         }));
 
       if (this.onResultCallback) {

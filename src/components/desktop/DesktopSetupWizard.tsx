@@ -312,13 +312,13 @@ export const DesktopSetupWizard: React.FC<DesktopSetupWizardProps> = ({ onComple
               <div className={`p-5 rounded-2xl border space-y-4 relative overflow-hidden ${
                 isDark ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-50/90 border-slate-200'
               }`}>
-                {/* Simulated Collaboration Document Canvas */}
+                {/* Collaboration profile preview */}
                 <div className="p-4 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3 relative shadow-sm">
                   <div className="flex items-center justify-between border-b pb-2 border-slate-100 dark:border-slate-800">
                     <span className="text-[11px] font-mono font-bold text-slate-400">#live-session-demo</span>
                     <span className="flex items-center gap-1 text-[10px] text-emerald-500 font-semibold">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      Active Collaboration
+                      Profile Preview
                     </span>
                   </div>
 
@@ -326,7 +326,7 @@ export const DesktopSetupWizard: React.FC<DesktopSetupWizardProps> = ({ onComple
                     LivePad features real-time presence, multi-user document syncing, and rich markdown editing...
                   </p>
 
-                  {/* Simulated Realtime Cursor */}
+                  {/* Profile cursor preview */}
                   <div className="relative pt-2">
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-white text-[11px] font-bold shadow-md transform -rotate-1" style={{ backgroundColor: profileColor }}>
                       <MousePointer size={12} className="fill-current" />
@@ -350,7 +350,7 @@ export const DesktopSetupWizard: React.FC<DesktopSetupWizardProps> = ({ onComple
                         {effectiveName}
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono">
-                        Ready for live sync
+                        Profile ready for live sessions
                       </div>
                     </div>
                   </div>

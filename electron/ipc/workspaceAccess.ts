@@ -6,20 +6,18 @@ const authorizedRoots = new Map<number, Set<string>>();
 
 /** Windows can return extended-length paths from realpathSync.native. Convert them to native paths for comparison. */
 function normalizeComparablePath(value: string): string {
-  let normalized = value.trim();
+  let normalized = String(value).trim();
   if (process.platform === 'win32') {
-    if (normalized.startsWith('\\\\?\\UNC\\')) normalized = `\\\\${normalized.slice(8)}`;
-    else if (normalized.startsWith('\\\\?\\')) normalized = normalized.slice(4);
-    normalized = path.win32.normalize(normalized);
-    return normalized.replace(/[\\/]+$/, '').toLowerCase();
+    normalized = normalized.replaceAll('\\', '/');
+    if (normalized.startsWith('//?/UNC/')) normalized = `//${normalized.slice(8)}`;
+    else if (normalized.startsWith('//?/')) normalized = normalized.slice(4);
+    normalized = path.win32.normalize(normalized).replaceAll('\\', '/');
+    while (normalized.length > 3 && normalized.endsWith('/')) normalized = normalized.slice(0, -1);
+    return normalized.toLowerCase();
   }
   normalized = path.posix.normalize(normalized);
-  return normalized.replace(/\/+$/, '');
-}
-
-function canonicalExistingPath(targetPath: string): string {
-  // realpath (not native) gives a stable path representation that matches the rest of Electron's APIs.
-  return fs.realpathSync(path.resolve(targetPath));
+  while (normalized.length > 1 && normalized.endsWith('/')) normalized = normalized.slice(0, -1);
+  return normalized;
 }
 
 function isWithinRoot(targetPath: string, rootPath: string): boolean {
@@ -27,11 +25,11 @@ function isWithinRoot(targetPath: string, rootPath: string): boolean {
   const root = normalizeComparablePath(rootPath);
   if (!target || !root) return false;
   if (target === root) return true;
+  return target.startsWith(`${root}/`);
+}
 
-  const relative = process.platform === 'win32'
-    ? path.win32.relative(root, target)
-    : path.posix.relative(root, target);
-  return relative !== '' && relative !== '..' && !relative.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !(process.platform === 'win32' ? path.win32.isAbsolute(relative) : path.posix.isAbsolute(relative));
+function canonicalExistingPath(targetPath: string): string {
+  return fs.realpathSync(path.resolve(targetPath));
 }
 
 export function authorizeWorkspaceRoot(webContents: WebContents, selectedPath: string): string {

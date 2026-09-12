@@ -115,7 +115,7 @@ export class GitHubService {
       const items = await this.request<Array<Record<string, any>>>(`/repos/${encodeURIComponent(repo.fullName)}/issues?state=all&per_page=20`);
       issues.push(...items.filter((issue) => !issue.pull_request).map((issue) => ({
         id: issue.id, number: issue.number, title: issue.title, author: issue.user?.login || 'unknown',
-        status: issue.state === 'open' ? 'open' : 'closed', labels: (issue.labels || []).map((label: any) => ({ name: label.name, color: `#${label.color || '888888'}` })),
+        status: (issue.state === 'open' ? 'open' : 'closed') as 'open' | 'closed', labels: (issue.labels || []).map((label: any) => ({ name: label.name, color: `#${label.color || '888888'}` })),
         createdAt: issue.created_at || '', commentsCount: issue.comments || 0, assignee: issue.assignee?.login,
       })));
     }
@@ -129,7 +129,7 @@ export class GitHubService {
       const result = await this.request<{ workflow_runs: Array<Record<string, any>> }>(`/repos/${encodeURIComponent(repo.fullName)}/actions/runs?per_page=20`);
       runs.push(...result.workflow_runs.map((run) => ({
         id: run.id, name: run.name || run.display_title || 'Workflow run', workflow: run.path || '', branch: run.head_branch || '',
-        status: run.status === 'completed' ? 'completed' : run.status === 'queued' ? 'queued' : 'in_progress',
+        status: (run.status === 'completed' ? 'completed' : run.status === 'queued' ? 'queued' : 'in_progress') as 'completed' | 'in_progress' | 'queued' | 'failed',
         conclusion: run.conclusion === 'success' || run.conclusion === 'failure' || run.conclusion === 'cancelled' || run.conclusion === 'neutral' ? run.conclusion : null,
         createdAt: run.created_at || '', durationMs: run.run_started_at && run.updated_at ? Math.max(0, new Date(run.updated_at).getTime() - new Date(run.run_started_at).getTime()) : 0,
       })));

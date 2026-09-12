@@ -70,7 +70,7 @@ import RecycleBinModal from './code/RecycleBinModal';
 import ProjectManagerModal from './code/ProjectManagerModal';
 import MonacoEditorWrapper from './code/MonacoEditorWrapper';
 import ErrorBoundary from './ErrorBoundary';
-import AICopilotPanel from './code/AICopilotPanel';
+import { AICopilotPanel } from './code/AICopilotPanel';
 import InteractiveTerminal from './code/InteractiveTerminal';
 import SearchFilesModal from './code/SearchFilesModal';
 import DebugPanel from './code/DebugPanel';

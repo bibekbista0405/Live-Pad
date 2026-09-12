@@ -419,7 +419,7 @@ export class ElectronPlatform implements IPlatformServices {
     if (this.bridge) {
       return await this.bridge.setDebuggerBreakpoint(sessionId, file, line);
     }
-    return this.fallbackBrowser.setDebuggerBreakpoint(sessionId, file, line);
+    return this.fallbackBrowser.setDebuggerBreakpoint();
   }
 
   public async evaluateDebugger(sessionId: string, expression: string): Promise<any> {

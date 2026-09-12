@@ -317,7 +317,12 @@ service cloud.firestore {
           && request.resource.data.text is string
           && request.resource.data.text.size() <= 20000
           && request.resource.data.timestamp is number;
-        allow update: if canCommentByRoomId(roomId) && resource.data.senderUid == request.auth.uid;
+        allow update: if canCommentByRoomId(roomId) && (
+          (resource.data.senderUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'isEdited', 'editedAt']))
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+            && request.resource.data.reactions is map)
+        );
         allow delete: if resource.data.senderUid == request.auth.uid || isAdminByRoomId(roomId);
       }
 

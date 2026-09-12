@@ -1888,6 +1888,8 @@ export default function App() {
   const [consoleLogs, setConsoleLogs] = useState<{ type: 'log' | 'info' | 'warn' | 'error'; text: string; id: number }[]>([]);
   const [isAutoRun, setIsAutoRun] = useState<boolean>(true);
   const [htmlPreviewDoc, setHtmlPreviewDoc] = useState<string>('');
+  const [jsSandboxDoc, setJsSandboxDoc] = useState<string>('');
+  const [sandboxRunKey, setSandboxRunKey] = useState(0);
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [isSnippetDropdownOpen, setIsSnippetDropdownOpen] = useState<boolean>(false);
   const [isWordSizeDropdownOpen, setIsWordSizeDropdownOpen] = useState<boolean>(false);
@@ -3295,63 +3297,24 @@ export default function App() {
     return () => clearTimeout(handler);
   }, [editorContent, isCodeMode, codeLanguage, isAutoRun]);
 
-  // Clean JS Interpreter Simulating Sandbox
-  const runJavascriptSandbox = (codeStr: string) => {
-    const customLogs: { type: 'log' | 'info' | 'warn' | 'error'; text: string; id: number }[] = [];
-    let logCounter = 0;
-
-    const pushLog = (type: 'log' | 'info' | 'warn' | 'error', args: any[]) => {
-      logCounter++;
-      const text = args.map(arg => {
-        if (arg === null) return 'null';
-        if (arg === undefined) return 'undefined';
-        if (typeof arg === 'object') {
-          try {
-            return JSON.stringify(arg, null, 2);
-          } catch {
-            return '[Circular Object]';
-          }
-        }
-        return String(arg);
-      }).join(' ');
-
-      customLogs.push({ type, text, id: Date.now() + logCounter });
-    };
-
-    const simulatedConsole = {
-      log: (...args: any[]) => pushLog('log', args),
-      info: (...args: any[]) => pushLog('info', args),
-      warn: (...args: any[]) => pushLog('warn', args),
-      error: (...args: any[]) => pushLog('error', args)
-    };
-
-    try {
-      // Evaluate within a functional scoping block trapping errors
-      const executor = new Function('console', `
-        try {
-          ${codeStr}
-        } catch (err) {
-          console.error(err.stack || err.message || err);
-        }
-      `);
-      executor(simulatedConsole);
-
-      if (customLogs.length === 0) {
-        customLogs.push({
-          type: 'info',
-          text: 'undefined (Executed successfully with no logged outputs. Try calling console.log("Hello")!)',
-          id: Date.now()
-        });
-      }
-    } catch (err: any) {
-      customLogs.push({
-        type: 'error',
-        text: `Syntax Compilation Error: ${err.message}`,
-        id: Date.now()
-      });
-    }
-
-    return customLogs;
+  // Execute JavaScript only inside an opaque-origin iframe. The LivePad renderer
+  // never evaluates user code directly, so editor state and storage stay isolated.
+  const buildJavaScriptSandboxDocument = (codeStr: string) => {
+    const safeCode = JSON.stringify(codeStr).replaceAll('</script', '<\\/script');
+    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; connect-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:"></head><body style="margin:0;background:#09090b;color:#e4e4e7;font-family:ui-monospace,SFMono-Regular,Menlo,monospace"><script>
+(() => {
+  const send=(type,payload)=>parent.postMessage({source:'livepad-js-sandbox',type,payload},'*');
+  const stringify=(value)=>{try{if(typeof value==='string')return value;if(typeof value==='undefined')return 'undefined';if(typeof value==='bigint')return value+'n';if(value instanceof Error)return value.stack||value.message;return JSON.stringify(value,null,2)}catch{return String(value)}};
+  const proxy={};
+  ['log','info','warn','error'].forEach(level=>proxy[level]=(...args)=>send('CONSOLE_LOG',{level,message:args.map(stringify).join(' ')}));
+  window.console=proxy;
+  window.onerror=(message,source,line,column,error)=>send('RUNTIME_ERROR',{message:String(message),line,column,stack:error&&error.stack});
+  window.onunhandledrejection=(event)=>send('RUNTIME_ERROR',{message:stringify(event.reason)});
+  const source=${safeCode};
+  try { const script=document.createElement('script'); script.textContent=source; document.body.appendChild(script); send('EXECUTION_COMPLETE',{}); }
+  catch(error){ send('RUNTIME_ERROR',{message:error instanceof Error?error.message:String(error),stack:error&&error.stack}); }
+})();
+</script></body></html>`;
   };
 
   const executeSandboxCode = () => {
@@ -3359,12 +3322,28 @@ export default function App() {
       setHtmlPreviewDoc(editorContent);
       setIframeKey(prev => prev + 1);
       addToast('success', 'Web rendering preview generated successfully.');
-    } else {
-      const logs = runJavascriptSandbox(editorContent);
-      setConsoleLogs(logs);
-      addToast('success', 'Sandbox JS code compiled and executed.');
+      return;
     }
+    setConsoleLogs([]);
+    setJsSandboxDoc(buildJavaScriptSandboxDocument(editorContent));
+    setSandboxRunKey(prev => prev + 1);
+    addToast('success', 'JavaScript started in the isolated browser sandbox.');
   };
+
+  useEffect(() => {
+    const handleSandboxMessage = (event: MessageEvent) => {
+      if (event.data?.source !== 'livepad-js-sandbox') return;
+      const payload = event.data.payload || {};
+      if (event.data.type === 'CONSOLE_LOG') {
+        const type = payload.level === 'error' ? 'error' : payload.level === 'warn' ? 'warn' : payload.level === 'info' ? 'info' : 'log';
+        setConsoleLogs(prev => [...prev, { type, text: String(payload.message ?? ''), id: Date.now() + prev.length }]);
+      } else if (event.data.type === 'RUNTIME_ERROR') {
+        setConsoleLogs(prev => [...prev, { type: 'error', text: String(payload.message ?? 'Runtime error'), id: Date.now() + prev.length }]);
+      }
+    };
+    window.addEventListener('message', handleSandboxMessage);
+    return () => window.removeEventListener('message', handleSandboxMessage);
+  }, []);
 
   const loadCodeTemplate = () => {
     if (codeLanguage === 'html') {
@@ -3416,7 +3395,7 @@ const sampleObject = {
   isRealtime: true,
   collaboratorsOnline: 4
 };
-console.log("Demo Data Object:", sampleObject);
+console.log("Workspace example:", sampleObject);
 
 console.warn("Verify your variables before deployment!");
 `);
@@ -6927,7 +6906,7 @@ console.warn("Verify your variables before deployment!");
                                       ) : (
                                         <>
                                           <Terminal className="w-3.5 h-3.5 text-yellow-500 animate-pulse" />
-                                          Simulated Console
+                                          JavaScript Sandbox Console
                                         </>
                                       )}
                                     </span>
@@ -7025,47 +7004,20 @@ console.warn("Verify your variables before deployment!");
                                     </div>
                                   ) : (
                                     <div className="w-full h-full rounded-xl border border-zinc-800 bg-zinc-950 shadow-inner flex flex-col overflow-hidden">
-                                      {/* Logs tools */}
-                                      <div className="h-8 px-4 bg-zinc-900 border-b border-zinc-800/85 border-zinc-800/80 flex items-center justify-between select-none text-[10px] shrink-0 text-zinc-400">
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse inline-block" />
-                                          Compiled Output Logs
+                                      <div className="h-8 px-4 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between select-none text-[10px] shrink-0 text-zinc-400">
+                                        <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse inline-block" />Isolated JavaScript Console</div>
+                                        <button type="button" onClick={() => setConsoleLogs([])} className="hover:text-white cursor-pointer hover:underline uppercase tracking-wider font-extrabold text-[9px]">Clear Console</button>
+                                      </div>
+                                      <div className="flex-1 grid grid-rows-[minmax(0,1fr)_minmax(0,1fr)] min-h-0">
+                                        <iframe key={sandboxRunKey} title="LivePad isolated JavaScript sandbox" srcDoc={jsSandboxDoc || '<!doctype html><html><body style=\"background:#09090b\"></body></html>'} sandbox="allow-scripts" referrerPolicy="no-referrer" className="w-full h-full border-0 bg-zinc-950" />
+                                        <div className="min-h-0 p-4 overflow-y-auto font-mono text-[11px] leading-relaxed space-y-3 border-t border-zinc-800">
+                                          {consoleLogs.length === 0 ? <div className="text-zinc-500 italic py-6 text-center select-none">Run JavaScript to see real console output from the isolated browser runtime.</div> : consoleLogs.map((log) => {
+                                            const typeColors = log.type === 'error' ? 'text-rose-400 bg-rose-500/5 border-l-2 border-rose-500 pl-2 py-0.5' : log.type === 'warn' ? 'text-amber-400 bg-amber-500/5 border-l-2 border-amber-500 pl-2 py-0.5' : log.type === 'info' ? 'text-cyan-400 bg-cyan-500/5 border-l-2 border-cyan-500 pl-2 py-0.5' : 'text-zinc-200 pl-2';
+                                            return <div key={log.id} className={`${typeColors} whitespace-pre-wrap break-all`}><span className="text-zinc-500 text-[9px] mr-1.5 select-none font-sans font-bold">[{log.type.toUpperCase()}]</span>{log.text}</div>;
+                                          })}
                                         </div>
-                                        <button
-                                          type="button"
-                                          onClick={() => setConsoleLogs([])}
-                                          className="hover:text-white cursor-pointer hover:underline uppercase tracking-wider font-extrabold text-[9px]"
-                                        >
-                                          Clear Console
-                                        </button>
                                       </div>
-
-                                      {/* Console Container */}
-                                      <div className="flex-1 p-4 overflow-y-auto font-mono text-[11px] leading-relaxed space-y-3 h-full select-text selection:bg-zinc-800">
-                                        {consoleLogs.length === 0 ? (
-                                          <div className="text-zinc-500 italic py-6 text-center select-none">
-                                            No compiled console logs available yet. Press "Run Code" above to execute execution chains!
-                                          </div>
-                                        ) : (
-                                          consoleLogs.map((log) => {
-                                            const typeColors = 
-                                              log.type === 'error' ? 'text-rose-400 bg-rose-500/5 border-l-2 border-rose-500 pl-2 py-0.5' :
-                                              log.type === 'warn' ? 'text-amber-400 bg-amber-500/5 border-l-2 border-amber-500 pl-2 py-0.5' :
-                                              log.type === 'info' ? 'text-cyan-400 bg-cyan-500/5 border-l-2 border-cyan-500 pl-2 py-0.5' :
-                                              'text-zinc-200 pl-2';
-                                            return (
-                                              <div key={log.id} className={`${typeColors} whitespace-pre-wrap break-all transition-all duration-200`}>
-                                                <span className="text-zinc-500 text-[9px] mr-1.5 select-none font-sans font-bold">
-                                                  [{log.type.toUpperCase()}]
-                                                </span>
-                                                {log.text}
-                                              </div>
-                                            );
-                                          })
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
+                                    </div>                                  )}
                                 </div>
                               </div>
                             </div>

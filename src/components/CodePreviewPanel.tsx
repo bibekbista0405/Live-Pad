@@ -298,7 +298,7 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
 
-          {/* Simulated URL Address Bar */}
+          {/* Preview URL Bar */}
           <div className="flex-1 max-w-xs md:max-w-sm bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 flex items-center gap-2 text-xs font-mono text-slate-300 overflow-hidden">
             <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
             <span className="truncate text-cyan-300">http://localhost:3000/{activeFile?.name || 'app.js'}</span>
@@ -325,7 +325,7 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
             type="button"
             onClick={() => setShowDeviceMenu(!showDeviceMenu)}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700/80 text-slate-200 border border-slate-700/70 text-xs font-bold transition-all cursor-pointer"
-            title="Select Simulated Device Layout"
+            title="Select Preview Viewport"
           >
             <SelectedDeviceIcon className="w-3.5 h-3.5 text-cyan-400" />
             <span className="font-mono text-[11px] hidden md:inline">{DEVICE_DIMENSIONS[devicePreset].name}</span>
@@ -343,7 +343,7 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
                   className="absolute right-0 top-full mt-1.5 w-56 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-0.5"
                 >
                   <div className="px-2 py-1 text-[10px] font-mono font-black uppercase text-slate-400 border-b border-slate-800 mb-1">
-                    Device Frame Presets
+                    Viewport Presets
                   </div>
                   {(Object.keys(DEVICE_DIMENSIONS) as DevicePreset[]).map((key) => {
                     const dev = DEVICE_DIMENSIONS[key];
@@ -466,12 +466,12 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
             transformOrigin: 'center center'
           }}
         >
-          {/* Simulated Device Bezel / Status Bar Header */}
+          {/* Preview Viewport Header */}
           {devicePreset !== 'desktop' && (
             <div className="h-6 shrink-0 flex items-center justify-between px-3 text-[10px] font-mono text-slate-400 border-b border-slate-800/80 mb-1">
               <span className="flex items-center gap-1 font-bold text-slate-300">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                LivePad Device Frame
+                LivePad Preview
               </span>
               <span>{DEVICE_DIMENSIONS[devicePreset].name}</span>
             </div>

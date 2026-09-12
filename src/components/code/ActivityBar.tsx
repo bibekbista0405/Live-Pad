@@ -1,15 +1,12 @@
 import React, { memo } from 'react';
 import {
   Files,
-  Search,
-  Bug,
+  Play,
   FlaskConical,
   MessageSquare,
-  Mic,
   MessageCircleCode,
   GraduationCap,
   Trash2,
-  Settings,
   FolderGit2,
   BookOpen
 } from 'lucide-react';
@@ -28,12 +25,13 @@ interface ActivityBarProps {
   unreadNotificationsCount?: number;
   unreadChatCount?: number;
   learningRole?: LearningRole;
+  showManagementControls?: boolean;
 }
 
 const primaryTabs: Array<{ id: ActivityBarTab; label: string; icon: React.ElementType; title: string }> = [
   { id: 'explorer', label: 'Files', icon: Files, title: 'Files & project' },
   { id: 'knowledge', label: 'Learn', icon: BookOpen, title: 'Lessons & learning' },
-  { id: 'run', label: 'Run', icon: Bug, title: 'Run your code' },
+  { id: 'run', label: 'Run', icon: Play, title: 'Run your code' },
   { id: 'testing', label: 'Check', icon: FlaskConical, title: 'Checks & tests' },
   { id: 'chat', label: 'Chat', icon: MessageSquare, title: 'Learn together' },
   { id: 'comments', label: 'Discuss', icon: MessageCircleCode, title: 'Discuss code' },
@@ -52,7 +50,8 @@ export function ActivityBar({
   onOpenProjects,
   unreadNotificationsCount = 0,
   unreadChatCount = 0,
-  learningRole = 'peer'
+  learningRole = 'peer',
+  showManagementControls = true
 }: ActivityBarProps) {
   const handleClick = (tab: ActivityBarTab) => {
     if (activeTab === tab && isSidebarOpen) onToggleSidebar();
@@ -94,14 +93,14 @@ export function ActivityBar({
         {learningRole === 'teacher' && (
           <>
             <div className="w-5 h-px bg-white/[0.08] my-2" />
-            <div className="w-full px-1.5 mb-1 text-[7px] uppercase tracking-[0.14em] text-white/25 text-center">Lead</div>
+            <div className="w-full px-1.5 mb-1 text-[7px] uppercase tracking-[0.14em] text-white/25 text-center">Teacher</div>
             {teacherTabs.map(renderTab)}
           </>
         )}
       </div>
 
       <div className="flex flex-col items-center w-full gap-0.5">
-        {onOpenProjects && (
+        {onOpenProjects && showManagementControls && (
           <button
             type="button"
             onClick={onOpenProjects}
@@ -112,7 +111,7 @@ export function ActivityBar({
             <FolderGit2 className="w-[17px] h-[17px] stroke-[1.7]" />
           </button>
         )}
-        <button
+        {showManagementControls && <button
           type="button"
           onClick={() => handleClick('trash')}
           className={`w-full h-9 flex items-center justify-center transition-colors cursor-pointer ${activeTab === 'trash' && isSidebarOpen ? 'text-white' : 'text-white/25 hover:text-white/65'}`}
@@ -120,7 +119,7 @@ export function ActivityBar({
           aria-label="Deleted files"
         >
           <Trash2 className="w-[16px] h-[16px] stroke-[1.7]" />
-        </button>
+        </button>}
       </div>
     </div>
   );

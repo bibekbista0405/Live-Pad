@@ -48,7 +48,7 @@ export function CodeRunPanel({ activeFile, isPreviewOpen, isTeachingSession = fa
       <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-2">
         <div className="flex items-center gap-2 text-[10px] font-semibold text-white/55"><RefreshCw className="w-3 h-3 text-cyan-300" /> Live preview</div>
         <p className="text-[10px] leading-relaxed text-white/35">Save your changes and the preview uses the current project files. If something is wrong, check the browser console or the code before changing more.</p>
-        <div className="flex items-center gap-2 text-[10px] text-white/35"><Terminal className="w-3 h-3" /> Console output stays in the workspace terminal/preview tools.</div>
+        <div className="flex items-center gap-2 text-[10px] text-white/35"><Terminal className="w-3 h-3" /> Runtime errors appear directly in the preview.</div>
       </div>
     </div>
   );

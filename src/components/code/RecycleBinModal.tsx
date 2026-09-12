@@ -23,8 +23,8 @@ export default function RecycleBinModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[80vh]">
+    <div className="livepad-code-modal-backdrop">
+      <div className="livepad-code-modal livepad-recycle-bin">
         {/* Header */}
         <div className="px-6 py-4 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">

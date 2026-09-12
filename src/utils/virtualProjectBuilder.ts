@@ -632,11 +632,15 @@ export function buildVirtualProject(
     notifyParent('RUNTIME_ERROR', { message: e.reason ? (e.reason.message || String(e.reason)) : 'Unhandled Promise Rejection' });
   });
 
-  // Auto-boot React entry point (App.tsx / main.tsx / index.tsx)
+  // Auto-boot framework entry points only when the project has no HTML document.
+  // Plain HTML projects already execute their linked <script> tags; booting app.js a second time
+  // would duplicate event listeners and other side effects.
   window.addEventListener('DOMContentLoaded', function() {
     try {
+      const hasHtmlDocument = ${htmlFile ? 'true' : 'false'};
+      if (hasHtmlDocument) return;
       const entryCandidates = [
-        'src/App.tsx', 'src/App.jsx', 'src/App.js', 'src/main.tsx', 'src/main.jsx', 'src/index.tsx', 'src/index.jsx', 'App.tsx', 'app.js'
+        'src/App.tsx', 'src/App.jsx', 'src/App.js', 'src/main.tsx', 'src/main.jsx', 'src/index.tsx', 'src/index.jsx', 'App.tsx'
       ];
       let entryModule = null;
       for (const cand of entryCandidates) {

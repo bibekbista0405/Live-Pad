@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Sliders, Palette, Terminal, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, Check, Sliders, Palette, Terminal, CheckCircle2 } from 'lucide-react';
 import { profileService, WorkspaceProfile } from '../../services/profileService';
 
 interface ProfileSelectorModalProps {
@@ -30,8 +30,8 @@ export function ProfileSelectorModal({ isOpen, onClose, onProfileChanged }: Prof
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#1e1e1e] border border-[#3c3c3c] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+    <div className="livepad-code-modal-backdrop">
+      <div className="livepad-code-modal livepad-profile-modal">
         {/* Header */}
         <div className="p-4 bg-[#252526] border-b border-[#2d2d2d] flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -65,7 +65,7 @@ export function ProfileSelectorModal({ isOpen, onClose, onProfileChanged }: Prof
                   <div className="text-xs text-[#858585] flex items-center gap-3">
                     <span className="flex items-center gap-1"><Palette className="w-3 h-3"/> {p.theme}</span>
                     <span className="flex items-center gap-1"><Terminal className="w-3 h-3"/> Font {p.fontSize}px</span>
-                    <span className="flex items-center gap-1"><Sparkles className="w-3 h-3"/> {p.aiModel}</span>
+                    
                   </div>
                 </div>
 

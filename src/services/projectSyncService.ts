@@ -199,106 +199,54 @@ export function subscribeToProjectStructure(
 }
 
 export async function initializeWorkspaceProjectsInFirestore(
-  workspaceId: string,
-  userName: string = 'LivePad Developer'
+  workspaceId: string
 ): Promise<{ project: CodingProject; folders: ProjectFolder[]; files: ProjectFile[] }> {
   const projectId = `proj-${workspaceId}-main`;
+  const now = Date.now();
+  const authUser = await ensureAuth();
+  const createdBy = authUser?.uid || '';
+
   const defaultProj: CodingProject = {
     id: projectId,
     workspaceId,
-    name: 'Main Project',
-    description: 'Primary workspace coding project',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    createdBy: userName,
+    name: 'My First Website',
+    description: 'A simple HTML, CSS and JavaScript learning project.',
+    createdAt: now,
+    updatedAt: now,
+    createdBy,
     activeFileId: `file-index-${workspaceId}`,
-    openFileIds: [`file-index-${workspaceId}`, `file-app-${workspaceId}`, `file-style-${workspaceId}`],
+    openFileIds: [`file-index-${workspaceId}`, `file-style-${workspaceId}`, `file-app-${workspaceId}`],
     pinnedFileIds: [`file-index-${workspaceId}`]
   };
 
-  const defaultFolders: ProjectFolder[] = [
-    {
-      id: `folder-src-${workspaceId}`,
-      projectId,
-      name: 'src',
-      parentId: null,
-      path: 'src',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      isExpanded: true
-    },
-    {
-      id: `folder-components-${workspaceId}`,
-      projectId,
-      name: 'components',
-      parentId: `folder-src-${workspaceId}`,
-      path: 'src/components',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      isExpanded: true
-    }
-  ];
-
+  const defaultFolders: ProjectFolder[] = [];
   const defaultFiles: ProjectFile[] = [
     {
       id: `file-index-${workspaceId}`,
       projectId,
-      name: 'index.html',
-      extension: 'html',
-      language: 'html',
-      path: 'index.html',
-      parentId: null,
-      content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>LivePad Application</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <div id="app"></div>\n  <script src="src/app.js"></script>\n</body>\n</html>`,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      createdBy: userName,
-      updatedBy: userName,
-      version: 1,
-      isPinned: true
-    },
-    {
-      id: `file-app-${workspaceId}`,
-      projectId,
-      name: 'app.js',
-      extension: 'js',
-      language: 'javascript',
-      path: 'src/app.js',
-      parentId: `folder-src-${workspaceId}`,
-      content: `// LivePad Workspace Application\nconsole.log("LivePad IDE Initialized for workspace: ${workspaceId}");\n\nconst app = document.getElementById("app");\nif (app) {\n  app.innerHTML = "<h1 style='font-family: sans-serif; color: #0ea5e9;'>Hello from LivePad!</h1>";\n}`,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      createdBy: userName,
-      updatedBy: userName,
-      version: 1,
-      isPinned: false
+      name: 'index.html', extension: 'html', language: 'html', path: 'index.html', parentId: null,
+      content: `<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>My first web page</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <main class="card">\n    <p class="eyebrow">My first website</p>\n    <h1>Hello, LivePad!</h1>\n    <p id="message">I am learning HTML, CSS and JavaScript.</p>\n    <button id="changeMessage">Click me</button>\n  </main>\n  <script src="app.js"></script>\n</body>\n</html>`,
+      createdAt: now, updatedAt: now, createdBy, updatedBy: createdBy, version: 1, isPinned: true
     },
     {
       id: `file-style-${workspaceId}`,
       projectId,
-      name: 'style.css',
-      extension: 'css',
-      language: 'css',
-      path: 'style.css',
-      parentId: null,
-      content: `/* LivePad Stylesheet */\nbody {\n  margin: 0;\n  padding: 2rem;\n  background: #0f172a;\n  color: #f8fafc;\n  font-family: system-ui, sans-serif;\n}`,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      createdBy: userName,
-      updatedBy: userName,
-      version: 1,
-      isPinned: false
+      name: 'style.css', extension: 'css', language: 'css', path: 'style.css', parentId: null,
+      content: `* { box-sizing: border-box; }\n\nbody { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif; background: #f4f7fb; color: #172033; }\n.card { width: min(90vw, 520px); padding: 2.5rem; border-radius: 24px; background: white; box-shadow: 0 20px 60px rgba(23, 32, 51, 0.12); text-align: center; }\n.eyebrow { color: #0891b2; font-weight: 700; font-size: .8rem; text-transform: uppercase; letter-spacing: .12em; }\nbutton { border: 0; border-radius: 12px; padding: .75rem 1rem; background: #0891b2; color: white; font-weight: 700; cursor: pointer; }`,
+      createdAt: now, updatedAt: now, createdBy, updatedBy: createdBy, version: 1
+    },
+    {
+      id: `file-app-${workspaceId}`,
+      projectId,
+      name: 'app.js', extension: 'js', language: 'javascript', path: 'app.js', parentId: null,
+      content: `const button = document.querySelector('#changeMessage');\nconst message = document.querySelector('#message');\n\nbutton?.addEventListener('click', () => {\n  if (message) message.textContent = 'Great! You just changed a web page with JavaScript.';\n});`,
+      createdAt: now, updatedAt: now, createdBy, updatedBy: createdBy, version: 1
     }
   ];
 
   if (isFirebaseConfigured && db && workspaceId && !isFirestoreQuotaExhausted()) {
-    await ensureAuth();
     await saveProjectDoc(workspaceId, defaultProj);
-    for (const folder of defaultFolders) {
-      await saveProjectFolderDoc(workspaceId, projectId, folder);
-    }
-    for (const file of defaultFiles) {
-      await saveProjectFileDoc(workspaceId, projectId, file);
-    }
+    for (const file of defaultFiles) await saveProjectFileDoc(workspaceId, projectId, file);
   }
 
   return { project: defaultProj, folders: defaultFolders, files: defaultFiles };

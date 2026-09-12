@@ -77,7 +77,7 @@ export default function SearchFilesModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[999] bg-slate-950/80 backdrop-blur-md flex items-start justify-center pt-20 p-4 select-none">
+    <div className="livepad-code-modal-backdrop">
       <div className="w-full max-w-2xl bg-[#0c0f17] border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[75vh]">
         {/* Search Input Bar */}
         <div className="p-4 bg-slate-950/90 border-b border-slate-800 space-y-3 shrink-0">

@@ -1,22 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  Search,
-  FilePlus,
-  FolderPlus,
-  Edit2,
-  Trash2,
-  Copy,
-  Archive,
-  Upload,
-  History,
-  Recycle,
-  Sparkles,
-  WrapText,
-  Maximize2,
-  Layers,
-  X,
-  Code2
-} from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Archive, FilePlus2, FolderPlus, History, Search, Settings2, Trash2, X } from 'lucide-react';
 
 export interface CommandOption {
   id: string;
@@ -25,6 +8,7 @@ export interface CommandOption {
   shortcut?: string;
   icon: React.ReactNode;
   action: () => void;
+  teacherOnly?: boolean;
 }
 
 interface CommandPaletteModalProps {
@@ -33,50 +17,43 @@ interface CommandPaletteModalProps {
   commands: CommandOption[];
 }
 
-export default function CommandPaletteModal({
-  isOpen,
-  onClose,
-  commands
-}: CommandPaletteModalProps) {
+export default function CommandPaletteModal({ isOpen, onClose, commands }: CommandPaletteModalProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      setQuery('');
-      setSelectedIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
+    if (!isOpen) return;
+    setQuery('');
+    setSelectedIndex(0);
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 40);
+    return () => window.clearTimeout(timer);
   }, [isOpen]);
 
-  const safeCommands = Array.isArray(commands) ? commands : [];
+  const filteredCommands = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (Array.isArray(commands) ? commands : []).filter((cmd) => {
+      if (!cmd) return false;
+      if (!q) return true;
+      return `${cmd.label} ${cmd.category}`.toLowerCase().includes(q);
+    });
+  }, [commands, query]);
 
-  const filteredCommands = safeCommands.filter(
-    (cmd) =>
-      cmd &&
-      ((cmd.label || '').toLowerCase().includes(query.toLowerCase()) ||
-        (cmd.category || '').toLowerCase().includes(query.toLowerCase()))
-  );
+  useEffect(() => setSelectedIndex(0), [query]);
 
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev < filteredCommands.length - 1 ? prev + 1 : 0));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : filteredCommands.length - 1));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (filteredCommands[selectedIndex]) {
-        filteredCommands[selectedIndex].action();
-        onClose();
-      }
-    } else if (e.key === 'Escape') {
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSelectedIndex((index) => filteredCommands.length ? (index + 1) % filteredCommands.length : 0);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSelectedIndex((index) => filteredCommands.length ? (index - 1 + filteredCommands.length) % filteredCommands.length : 0);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      const command = filteredCommands[selectedIndex];
+      if (command) { command.action(); onClose(); }
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
       onClose();
     }
   };
@@ -84,72 +61,65 @@ export default function CommandPaletteModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[999] bg-slate-950/80 backdrop-blur-md flex items-start justify-center pt-20 p-4 select-none">
-      <div
-        className="w-full max-w-xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-        onKeyDown={handleKeyDown}
-      >
-        <div className="flex items-center px-4 py-3 bg-slate-950/60 border-b border-slate-800 gap-3">
-          <Code2 className="w-5 h-5 text-amber-400 shrink-0" />
+    <div className="livepad-code-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div className="livepad-code-modal livepad-command-palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={handleKeyDown}>
+        <div className="livepad-code-modal-search">
+          <Search className="w-4 h-4 shrink-0" aria-hidden="true" />
           <input
             ref={inputRef}
-            type="text"
-            placeholder="Type a command or search actions... (e.g., New File, Version History, Export)"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full bg-transparent text-sm font-mono text-white placeholder-slate-500 outline-none"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search commands and actions"
+            aria-label="Search commands and actions"
           />
-          <button type="button" onClick={onClose} className="p-1 text-slate-400 hover:text-white cursor-pointer">
-            <X className="w-4 h-4" />
-          </button>
+          <kbd>Esc</kbd>
+          <button type="button" onClick={onClose} aria-label="Close command palette"><X className="w-4 h-4" /></button>
         </div>
 
-        <div className="max-h-80 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+        <div className="livepad-command-list" role="listbox" aria-label="Commands">
           {filteredCommands.length === 0 ? (
-            <div className="p-8 text-center text-xs font-mono text-slate-500">
-              No matching commands found.
+            <div className="livepad-code-empty-state">
+              <Search className="w-5 h-5" />
+              <strong>No matching actions</strong>
+              <span>Try a file name, project action, or editor command.</span>
             </div>
-          ) : (
-            filteredCommands.map((cmd, idx) => {
-              const isSelected = idx === selectedIndex;
-              return (
-                <div
-                  key={cmd.id}
-                  onClick={() => {
-                    cmd.action();
-                    onClose();
-                  }}
-                  onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30'
-                      : 'hover:bg-slate-800/60 text-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="p-1.5 rounded-lg bg-slate-800 text-amber-400 shrink-0">{cmd.icon}</span>
-                    <div className="min-w-0">
-                      <div className="text-xs font-mono truncate">{cmd.label}</div>
-                      <div className="text-[10px] text-slate-500 uppercase tracking-wider">{cmd.category}</div>
-                    </div>
-                  </div>
-
-                  {cmd.shortcut && (
-                    <kbd className="text-[10px] font-mono bg-slate-800/90 text-slate-400 px-2 py-0.5 rounded border border-slate-700/80 shrink-0 ml-3">
-                      {cmd.shortcut}
-                    </kbd>
-                  )}
-                </div>
-              );
-            })
-          )}
+          ) : filteredCommands.map((command, index) => {
+            const selected = index === selectedIndex;
+            return (
+              <button
+                key={command.id}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className={`livepad-command-row ${selected ? 'is-selected' : ''}`}
+                onMouseEnter={() => setSelectedIndex(index)}
+                onClick={() => { command.action(); onClose(); }}
+              >
+                <span className="livepad-command-icon">{command.icon}</span>
+                <span className="livepad-command-copy">
+                  <strong>{command.label}</strong>
+                  <small>{command.category}</small>
+                </span>
+                {command.shortcut && <kbd>{command.shortcut}</kbd>}
+              </button>
+            );
+          })}
         </div>
 
-        <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-500">
-          <span>LivePad Command Palette</span>
-          <span>Press ESC to exit</span>
-        </div>
+        <footer className="livepad-code-modal-footer">
+          <span><strong>LivePad</strong> · Command palette</span>
+          <span>↑ ↓ navigate · Enter run</span>
+        </footer>
       </div>
     </div>
   );
 }
+
+export const commandPaletteIcons = {
+  newFile: <FilePlus2 className="w-4 h-4" />,
+  newFolder: <FolderPlus className="w-4 h-4" />,
+  settings: <Settings2 className="w-4 h-4" />,
+  export: <Archive className="w-4 h-4" />,
+  history: <History className="w-4 h-4" />,
+  trash: <Trash2 className="w-4 h-4" />
+};

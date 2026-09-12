@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MessageSquare, Send, Search, X, Reply, Smile, Code2, CheckCheck, Pencil, Trash2, Users, WifiOff } from 'lucide-react';
+import { MessageSquare, Send, Search, X, Reply, Code2, Pencil, Trash2, Users, WifiOff } from 'lucide-react';
 import { collection, addDoc, doc, updateDoc, deleteDoc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { chatOutbox } from '../../sync/chatOutbox';
@@ -44,10 +44,9 @@ function initials(name: string) {
   return parts.length > 1 ? `${parts[0][0]}${parts.at(-1)?.[0] || ''}`.toUpperCase() : clean.slice(0, 2).toUpperCase();
 }
 
-function safeName(name: string, uid: string) {
+function safeName(name: string) {
   const clean = name.trim();
-  if (clean) return clean;
-  return uid ? `User ${uid.slice(0, 6)}` : 'User';
+  return clean || 'Unnamed participant';
 }
 
 export function ChatPanel({
@@ -93,6 +92,27 @@ export function ChatPanel({
     });
   }, [roomId, currentUid]);
 
+  // Flush messages that were intentionally queued while offline or while Firestore was unavailable.
+  useEffect(() => {
+    if (!roomId || !db || !currentUid || !online) return;
+    let cancelled = false;
+    const flush = async () => {
+      const pending = chatOutbox.list(roomId);
+      for (const item of pending) {
+        if (cancelled) return;
+        try {
+          await addDoc(collection(db, 'rooms', roomId, 'messages'), item.data);
+          chatOutbox.remove(item.clientKey);
+        } catch (error) {
+          console.warn('[LivePad Chat] queued message flush failed', error);
+          break;
+        }
+      }
+    };
+    void flush();
+    return () => { cancelled = true; };
+  }, [roomId, currentUid, online]);
+
   useEffect(() => {
     if (!isOpen) return;
     const el = scrollRef.current;
@@ -116,11 +136,16 @@ export function ChatPanel({
     const cleanText = text.trim();
     const cleanSnippet = snippet.trim();
     if (!roomId || !currentUid || (!cleanText && !cleanSnippet)) return;
+    const senderName = userName.trim();
+    if (!senderName) {
+      onAddToast?.('error', 'Add your real profile name before sending a message.');
+      return;
+    }
     const clientKey = `${currentUid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const payload: Record<string, unknown> = {
       clientKey,
       senderUid: currentUid,
-      senderName: safeName(userName, currentUid),
+      senderName,
       senderRole: currentRole,
       text: cleanText,
       timestamp: Date.now(),
@@ -202,10 +227,10 @@ export function ChatPanel({
         ) : visibleMessages.map((message) => {
           const self = message.senderUid === currentUid;
           return (
-            <article key={message.id} className={`livepad-chat-message ${self ? 'is-self' : ''}`}>
+            <article id={`chat-${message.id}`} key={message.id} className={`livepad-chat-message ${self ? 'is-self' : ''}`}>
               <div className="livepad-chat-avatar" title={message.senderName}>{initials(message.senderName)}</div>
               <div className="livepad-chat-message-main">
-                <div className="livepad-chat-meta"><strong>{self ? 'You' : safeName(message.senderName, message.senderUid)}</strong>{message.senderRole && <span>{message.senderRole}</span>}<time>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
+                <div className="livepad-chat-meta"><strong>{self ? 'You' : safeName(message.senderName)}</strong>{message.senderRole && <span>{message.senderRole}</span>}<time>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
                 <div className="livepad-chat-bubble">
                   {message.replyTo && <button className="livepad-chat-reply-preview" onClick={() => document.getElementById(`chat-${message.replyTo!.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}><Reply size={12} /> {message.replyTo.senderName}: {message.replyTo.text}</button>}
                   {editingId === message.id ? (

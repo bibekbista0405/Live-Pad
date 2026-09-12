@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Edit2, Copy, Check, X, ArrowRight, FolderCode, Globe2 } from 'lucide-react';
+import { Plus, Edit2, Check, X, ArrowRight, Globe2, FolderCode, FileCode2, FileType2, Braces } from 'lucide-react';
 import { CodingProject } from '../../types/code';
 
 interface ProjectManagerModalProps {
@@ -10,8 +10,6 @@ interface ProjectManagerModalProps {
   onSelectProject: (projectId: string) => void;
   onCreateProject: (name: string, template?: string) => void;
   onRenameProject: (projectId: string, newName: string) => void;
-  onDuplicateProject: (projectId: string) => void;
-  onDeleteProject: (projectId: string) => void;
 }
 
 const TEMPLATES = [
@@ -25,9 +23,7 @@ export default function ProjectManagerModal({
   activeProjectId,
   onSelectProject,
   onCreateProject,
-  onRenameProject,
-  onDuplicateProject,
-  onDeleteProject
+  onRenameProject
 }: ProjectManagerModalProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -53,8 +49,8 @@ export default function ProjectManagerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[999] bg-black/55 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-3xl bg-[#101820] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+    <div className="livepad-code-modal-backdrop">
+      <div className="livepad-code-modal livepad-project-manager">
         {/* Header */}
         <div className="px-5 py-4 bg-[#0d141c] border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -74,7 +70,7 @@ export default function ProjectManagerModal({
               <button
                 type="button"
                 onClick={() => setIsCreating(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-xs font-bold shadow-md cursor-pointer hover:from-cyan-400 hover:to-blue-500 transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1597ae] hover:bg-[#1aa8c1] text-white text-xs font-semibold border border-cyan-300/10 shadow-none cursor-pointer transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>New Project</span>
@@ -113,7 +109,7 @@ export default function ProjectManagerModal({
                 <input
                   type="text"
                   autoFocus
-                  placeholder="e.g. Portfolio Website, Python Sandbox..."
+                  placeholder="e.g. My Portfolio"
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono text-white outline-none focus:border-cyan-500"
@@ -139,6 +135,13 @@ export default function ProjectManagerModal({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="livepad-project-starter-files">
+                <span>Creates</span>
+                <span><FileCode2 className="w-3.5 h-3.5" /> index.html</span>
+                <span><FileType2 className="w-3.5 h-3.5" /> style.css</span>
+                <span><Braces className="w-3.5 h-3.5" /> app.js</span>
               </div>
 
               <div className="flex justify-end gap-2 pt-1">
@@ -240,25 +243,7 @@ export default function ProjectManagerModal({
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => onDuplicateProject(proj.id)}
-                          className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
-                          title="Duplicate Project"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
 
-                        {projects.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => onDeleteProject(proj.id)}
-                            className="p-1.5 rounded-lg hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
-                            title="Delete Project"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
                       </div>
                     )}
                   </div>

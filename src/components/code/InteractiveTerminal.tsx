@@ -3,7 +3,6 @@ import {
   Terminal as TerminalIcon,
   Activity,
   Code2,
-  Sparkles,
   Trash2,
   X,
   Clock,
@@ -805,7 +804,7 @@ export function InteractiveTerminal({
                 : 'text-[#858585] hover:text-[#cccccc] hover:bg-[#2a2d2e]'
             }`}
           >
-            <Sparkles className="w-3 h-3 text-emerald-400" />
+            <TerminalIcon className="w-3 h-3 text-emerald-400" />
             <span>Environment</span>
           </button>
         </div>

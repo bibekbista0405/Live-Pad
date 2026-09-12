@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useSyncExternalStore } from 'react';
 import {
+  Wrench,
   Search,
   Blocks,
   Download,
@@ -9,7 +10,6 @@ import {
   RefreshCw,
   Trash2,
   Sliders,
-  Sparkles,
   Palette,
   FileCode2,
   Globe,
@@ -86,7 +86,7 @@ export function ExtensionMarketplacePanel({ onOpenSettings, onAddToast }: Extens
       case 'language-packs':
         return <Globe className="w-4 h-4 text-amber-400" />;
       case 'ai-tools':
-        return <Sparkles className="w-4 h-4 text-rose-400" />;
+        return <Wrench className="w-4 h-4 text-rose-400" />;
     }
   };
 
@@ -253,7 +253,7 @@ export function ExtensionMarketplacePanel({ onOpenSettings, onAddToast }: Extens
                   : 'bg-[#252526] text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Sparkles className="w-3 h-3 text-rose-400" /> AI Tools
+              <Wrench className="w-3 h-3 text-rose-400" /> Tools
             </button>
           </div>
         </div>
@@ -619,7 +619,7 @@ export function ExtensionMarketplacePanel({ onOpenSettings, onAddToast }: Extens
 
                   {selectedExtension.contributes.aiTools && (
                     <div className="p-2.5 bg-[#141414] border border-[#2d2d2d] rounded space-y-1">
-                      <span className="font-bold text-rose-400">AI Tools ({selectedExtension.contributes.aiTools.length})</span>
+                      <span className="font-bold text-rose-400">Tools ({selectedExtension.contributes.aiTools.length})</span>
                       {selectedExtension.contributes.aiTools.map((tool) => (
                         <div key={tool.id} className="text-[11px] text-slate-300 pl-2 border-l border-rose-500/40">
                           <span className="font-bold">{tool.name}</span>: {tool.description}

@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  RotateCcw,
   ExternalLink,
   Maximize2,
   Minimize2,
@@ -12,21 +11,10 @@ import {
   ZoomIn,
   ZoomOut,
   RefreshCw,
-  Copy,
   Check,
   AlertTriangle,
-  Radio,
-  Eye,
-  Sliders,
-  Sparkles,
-  Terminal,
-  Zap,
   Globe,
-  Share2,
   X,
-  Play,
-  ArrowLeft,
-  ArrowRight
 } from 'lucide-react';
 import { ProjectFile as CodeFile } from '../types/code';
 import { ConsoleLogEntry } from './CodeWorkspace';
@@ -61,6 +49,7 @@ export interface CodePreviewPanelProps {
   onToggleTeacherSync?: () => void;
   className?: string;
   onClosePreview?: () => void;
+  refreshToken?: number;
 }
 
 export interface RuntimeErrorState {
@@ -95,11 +84,10 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
     onToggleFullscreen,
     onAddToast,
     onConsoleLog,
-    userRole = 'student',
-    isTeacherSynced = false,
-    onToggleTeacherSync,
-    className = '',
-    onClosePreview
+    onOpenExternalTab,
+    className = '', 
+    onClosePreview,
+    refreshToken = 0
   } = props;
 
   const targetFiles = allFiles || files || [];
@@ -108,10 +96,11 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
   const handleZoomChange = onChangeZoomLevel || onZoomChange || (() => {});
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [runtimeError, setRuntimeError] = useState<RuntimeErrorState | null>(null);
-  const [copied, setCopied] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const externalWindowRef = useRef<Window | null>(null);
   const [showDeviceMenu, setShowDeviceMenu] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState('');
+  const hasInitializedPreview = useRef(false);
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
 
   // Initialize BroadcastChannel for cross-window sync
@@ -120,7 +109,7 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
       broadcastChannelRef.current = new BroadcastChannel('livepad_preview_sync');
       broadcastChannelRef.current.onmessage = (event) => {
         if (event.data?.type === 'REQUEST_PREVIEW_HTML') {
-          sendToBroadcastChannel(compilePreviewHTML());
+          sendToBroadcastChannel(previewBuild.html);
         }
       };
     } catch (e) {
@@ -142,29 +131,28 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
     }
   };
 
-  // Compile Workspace Files into a cohesive HTML payload
-  const compilePreviewHTML = (): string => {
-    const safeList = Array.isArray(safeFiles) ? safeFiles : [];
-    const buildResult = buildVirtualProject(safeList, activeFile);
+  const previewBuild = useMemo(() => buildVirtualProject(safeFiles, activeFile), [safeFiles, activeFile]);
 
-    if (buildResult.errors && buildResult.errors.length > 0) {
-      const firstErr = buildResult.errors[0];
+  useEffect(() => {
+    if (previewBuild.errors.length > 0) {
+      const firstErr = previewBuild.errors[0];
       setRuntimeError({
         message: `${firstErr.type.toUpperCase()} ERROR in ${firstErr.fileName}${firstErr.line ? ` (${firstErr.line}:${firstErr.column || 1})` : ''}: ${firstErr.message}`,
         line: firstErr.line,
         column: firstErr.column
       });
+    } else {
+      setRuntimeError(null);
     }
-
-    return buildResult.html;
-  };
+  }, [previewBuild]);
 
   // Update iframe & external window when compiled code changes
   const refreshPreview = () => {
     setIsRefreshing(true);
     setRuntimeError(null);
 
-    const html = compilePreviewHTML();
+    const html = previewBuild.html;
+    setPreviewDocument(html);
 
     if (iframeRef.current) {
       iframeRef.current.srcdoc = html;
@@ -189,16 +177,22 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
     }, 300);
   };
 
-  // Handle auto reload debouncing
+  // Load once immediately, then only refresh automatically when Auto Reload is enabled.
+  useEffect(() => {
+    if (hasInitializedPreview.current) return;
+    hasInitializedPreview.current = true;
+    setPreviewDocument(previewBuild.html);
+  }, [previewBuild.html]);
+
   useEffect(() => {
     if (!isAutoReload) return;
+    const timer = window.setTimeout(() => refreshPreview(), 300);
+    return () => window.clearTimeout(timer);
+  }, [previewBuild.html, isAutoReload]);
 
-    const timer = setTimeout(() => {
-      refreshPreview();
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [files, allFiles, activeFile, isAutoReload]);
+  useEffect(() => {
+    if (refreshToken > 0) refreshPreview();
+  }, [refreshToken]);
 
   // Listen for iframe postMessages (console logs & runtime errors)
   useEffect(() => {
@@ -231,7 +225,11 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
 
   // Open external preview window
   const handleOpenExternal = () => {
-    const html = compilePreviewHTML();
+    if (onOpenExternalTab) {
+      onOpenExternalTab();
+      return;
+    }
+    const html = previewBuild.html;
     const externalWin = window.open('', '_blank', 'width=1100,height=750,menubar=no,toolbar=no,status=no,resizable=yes');
 
     if (externalWin) {
@@ -249,16 +247,6 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
     }
   };
 
-  // Copy Preview HTML code
-  const handleCopyCode = () => {
-    const html = compilePreviewHTML();
-    navigator.clipboard.writeText(html);
-    setCopied(true);
-    if (typeof onAddToast === 'function') {
-      onAddToast('success', 'Copied preview bundle HTML to clipboard!');
-    }
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const SelectedDeviceIcon = DEVICE_DIMENSIONS[devicePreset].icon;
 
@@ -268,24 +256,6 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
       <div className="h-11 bg-slate-900 border-b border-slate-800/90 px-3 flex items-center justify-between shrink-0 gap-2 z-20">
         {/* Left Controls: Back, Forward, Refresh, Address Bar, Auto Reload */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <button
-            type="button"
-            onClick={() => refreshPreview()}
-            className="p-1.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all cursor-pointer"
-            title="Back in Preview History"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => refreshPreview()}
-            className="p-1.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all cursor-pointer"
-            title="Forward in Preview History"
-          >
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-
           <button
             type="button"
             onClick={refreshPreview}
@@ -299,9 +269,9 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
           </button>
 
           {/* Preview URL Bar */}
-          <div className="flex-1 max-w-xs md:max-w-sm bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 flex items-center gap-2 text-xs font-mono text-slate-300 overflow-hidden">
-            <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
-            <span className="truncate text-cyan-300">http://localhost:3000/{activeFile?.name || 'app.js'}</span>
+          <div className="flex-1 max-w-xs md:max-w-sm bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 flex items-center gap-2 text-xs text-slate-300 overflow-hidden">
+            <Globe className="w-3 h-3 text-slate-500 shrink-0" />
+            <span className="truncate text-slate-300">Local preview · {activeFile?.name || 'index.html'}</span>
           </div>
 
           <button
@@ -403,16 +373,6 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
             </button>
           </div>
 
-          {/* Copy Bundle HTML */}
-          <button
-            type="button"
-            onClick={handleCopyCode}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer"
-            title="Copy Compiled Bundle HTML"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-          </button>
-
           {/* Open External Window */}
           <button
             type="button"
@@ -483,8 +443,8 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
               ref={iframeRef}
               title="LivePad Code Sandbox Preview"
               className="w-full h-full border-0 bg-white"
-              sandbox="allow-scripts allow-modals allow-forms allow-popups allow-same-origin"
-              srcDoc={compilePreviewHTML()}
+              sandbox="allow-scripts allow-modals allow-forms allow-popups"
+              srcDoc={previewDocument}
             />
 
             {/* Error Overlay Panel if runtime exception occurs */}
@@ -529,7 +489,7 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
                   )}
 
                   <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-                    <span>💡 Tip: Check console logs or syntax in your active editor.</span>
+                    <span>Check the editor or console for the reported error.</span>
                     <button
                       type="button"
                       onClick={refreshPreview}

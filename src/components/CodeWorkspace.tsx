@@ -13,6 +13,7 @@ import {
   Check,
   X,
   Code2,
+  Command,
   Terminal,
   Eye,
   Settings,
@@ -20,7 +21,6 @@ import {
   Lock,
   Unlock,
   Radio,
-  Sparkles,
   BookOpen,
   Copy,
   ChevronRight,
@@ -120,7 +120,7 @@ import {
   ContextMenuState,
   ProblemDiagnostic
 } from '../types/code';
-import { getWorkspaceDiagnostics } from '../utils/virtualProjectBuilder';
+import { buildVirtualProject, getWorkspaceDiagnostics } from '../utils/virtualProjectBuilder';
 import { parseVitestJsonReport, parseV8Coverage } from '../services/vitestResults';
 import {
   saveLocalProjectData,
@@ -1009,6 +1009,7 @@ export default function CodeWorkspace({
     } catch (e) {}
   }, [isTerminalOpen, isPreviewOpen, rightSidebarOpen, leftSidebarOpen, activityBarTab]);
   const [isAutoReload, setIsAutoReload] = useState<boolean>(true);
+  const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
   const [devicePreset, setDevicePreset] = useState<DevicePreset>('desktop');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [isFullscreenPreview, setIsFullscreenPreview] = useState<boolean>(false);
@@ -1020,7 +1021,7 @@ export default function CodeWorkspace({
     {
       id: 'log-1',
       type: 'system',
-      message: 'LivePad Professional Cloud IDE ready. Live execution environment active.',
+      message: 'LivePad web preview ready. Changes are reflected in the browser preview.',
       timestamp: new Date().toLocaleTimeString()
     }
   ]);
@@ -1040,8 +1041,8 @@ export default function CodeWorkspace({
           return exists ? prev.map((p) => (p.id === data.project!.id ? data.project! : p)) : [...prev, data.project!];
         });
       }
-      if (data.folders.length > 0) setFolders(data.folders);
-      if (data.files.length > 0) {
+      if (data.project?.id === activeProjectId) setFolders(data.folders);
+      if (data.project?.id === activeProjectId) {
         setFiles(data.files);
         if (data.project?.activeFileId && data.files.some((f) => f.id === data.project.activeFileId)) {
           setActiveFileId(data.project.activeFileId);
@@ -1061,7 +1062,7 @@ export default function CodeWorkspace({
           }
         } else {
           // Auto-initialize workspace in Firestore if no projects exist
-          initializeWorkspaceProjectsInFirestore(workspaceId, userName).then((res) => {
+          initializeWorkspaceProjectsInFirestore(workspaceId).then((res) => {
             setProjects([res.project]);
             setActiveProjectId(res.project.id);
             setFolders(res.folders);
@@ -1077,8 +1078,8 @@ export default function CodeWorkspace({
     const unsubStructure = subscribeToProjectStructure(
       workspaceId,
       activeProjectId,
-      (fList) => { if (fList.length > 0) setFolders(fList); },
-      (fldList) => { if (fldList.length > 0) setFiles(fldList); },
+      (fList) => setFolders(fList),
+      (fldList) => setFiles(fldList),
       (trashList) => setTrash(trashList)
     );
 
@@ -1105,58 +1106,6 @@ export default function CodeWorkspace({
     return () => topBroadcastChannelRef.current?.close();
   }, []);
 
-  const compilePreviewBundle = useCallback(() => {
-    const safeList = Array.isArray(files) ? files : [];
-    const cssFiles = safeList.filter((f) => f && (f.language === 'css' || f.name?.endsWith('.css')));
-    const combinedCSS = cssFiles.map((f) => `/* File: ${f.name} */\n${f.content || ''}`).join('\n\n');
-
-    const jsFiles = safeList.filter(
-      (f) =>
-        f &&
-        (f.language === 'javascript' ||
-          f.language === 'typescript' ||
-          f.name?.endsWith('.js') ||
-          f.name?.endsWith('.ts'))
-    );
-    const combinedJS = jsFiles.map((f) => `// File: ${f.name}\n${f.content || ''}`).join('\n\n');
-
-    let baseHTML = '';
-    const htmlFile = safeList.find((f) => f && (f.language === 'html' || f.name?.endsWith('.html')));
-    if (htmlFile) {
-      baseHTML = htmlFile.content;
-    } else {
-      baseHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <title>LivePad Application Preview</title>
-</head>
-<body class="bg-slate-950 text-slate-100 p-6 min-h-screen">
-  <div id="root" class="max-w-xl mx-auto p-6 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl">
-    <h1 class="text-2xl font-black text-white">Application View</h1>
-    <p class="text-slate-400 text-sm mt-2">Active File: <code class="text-cyan-300 font-mono">${activeFile?.name || 'app.js'}</code></p>
-  </div>
-</body>
-</html>`;
-    }
-
-    let finalHTML = baseHTML;
-    if (combinedCSS.trim()) {
-      const styleTag = `<style id="livepad-injected-css">\n${combinedCSS}\n</style>`;
-      finalHTML = finalHTML.includes('</head>')
-        ? finalHTML.replace('</head>', `${styleTag}\n</head>`)
-        : `${styleTag}\n${finalHTML}`;
-    }
-
-    const jsInjection = `<script id="livepad-injected-js">\ntry {\n${combinedJS}\n} catch(err) {\n  console.error("Runtime Exception:", err.message);\n}\n</script>`;
-    finalHTML = finalHTML.includes('</body>')
-      ? finalHTML.replace('</body>', `${jsInjection}\n</body>`)
-      : finalHTML + jsInjection;
-
-    return finalHTML;
-  }, [files, activeFile]);
 
   // Sync with active editor content
   const handleSelectFile = (fileId: string, isMulti = false, isRange = false) => {
@@ -1289,7 +1238,7 @@ export default function CodeWorkspace({
     const path = parent ? `${parent.path}/${name}` : name;
 
     const newFolder: ProjectFolder = {
-      id: `folder-${Date.now()}`,
+      id: `folder-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}`,
       projectId: activeProjectId,
       name,
       parentId,
@@ -1312,7 +1261,7 @@ export default function CodeWorkspace({
     const initialContent = getFileBoilerplate(name);
 
     const newFile: ProjectFile = {
-      id: `file-${Date.now()}`,
+      id: `file-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}`,
       projectId: activeProjectId,
       name,
       extension: ext,
@@ -1322,8 +1271,8 @@ export default function CodeWorkspace({
       content: initialContent,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      createdBy: userName || 'collaborator',
-      updatedBy: userName || 'collaborator',
+      createdBy: currentUserUid,
+      updatedBy: currentUserUid,
       version: 1
     };
 
@@ -1368,7 +1317,7 @@ export default function CodeWorkspace({
       if (!source) return;
       const dup: ProjectFile = {
         ...source,
-        id: `file-${Date.now()}`,
+        id: `file-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}`,
         name: `Copy_of_${source.name}`,
         createdAt: Date.now(),
         updatedAt: Date.now()
@@ -1382,7 +1331,7 @@ export default function CodeWorkspace({
       if (!source) return;
       const dupFolder: ProjectFolder = {
         ...source,
-        id: `folder-${Date.now()}`,
+        id: `folder-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}`,
         name: `Copy_of_${source.name}`,
         createdAt: Date.now(),
         updatedAt: Date.now()
@@ -1404,7 +1353,7 @@ export default function CodeWorkspace({
             originalItem: item,
             itemType: 'file',
             deletedAt: Date.now(),
-            deletedBy: userName || 'collaborator'
+            deletedBy: currentUserUid
           };
           setTrash((prev) => [...prev, trashItem]);
           saveTrashDoc(workspaceId, activeProjectId, trashItem);
@@ -1421,7 +1370,7 @@ export default function CodeWorkspace({
             originalItem: item,
             itemType: 'folder',
             deletedAt: Date.now(),
-            deletedBy: userName || 'collaborator'
+            deletedBy: currentUserUid
           };
           setTrash((prev) => [...prev, trashItem]);
           saveTrashDoc(workspaceId, activeProjectId, trashItem);
@@ -1700,6 +1649,7 @@ export default function CodeWorkspace({
       action: () => setIsQuickOpenOpen(true)
     },
     {
+      teacherOnly: true,
       id: 'cmd-switch-profile',
       category: 'Preferences',
       label: 'Switch Workspace Profile & Preferences',
@@ -1707,6 +1657,7 @@ export default function CodeWorkspace({
       action: () => setIsProfileModalOpen(true)
     },
     {
+      teacherOnly: true,
       id: 'cmd-export-zip',
       category: 'Project',
       label: 'Export Full Project ZIP',
@@ -1721,6 +1672,7 @@ export default function CodeWorkspace({
       action: () => setIsVersionHistoryOpen(true)
     },
     {
+      teacherOnly: true,
       id: 'cmd-recycle-bin',
       category: 'File',
       label: 'Open Project Recycle Bin / Trash',
@@ -1728,6 +1680,7 @@ export default function CodeWorkspace({
       action: () => setIsRecycleBinOpen(true)
     },
     {
+      teacherOnly: true,
       id: 'cmd-manage-projects',
       category: 'Workspace',
       label: 'Manage & Switch Projects',
@@ -1739,7 +1692,7 @@ export default function CodeWorkspace({
       category: 'Editor',
       label: 'Format Active Document',
       shortcut: 'Shift + Alt + F',
-      icon: <Sparkles className="w-4 h-4" />,
+      icon: <Type className="w-4 h-4" />,
       action: () => {
         if (editorRef.current) {
           editorRef.current.getAction('editor.action.formatDocument')?.run();
@@ -1748,6 +1701,8 @@ export default function CodeWorkspace({
       }
     }
   ];
+
+  const visibleCommandOptions = commandOptions.filter((command) => !command.teacherOnly || !isTeachingSession || canControlCodeMode);
 
   // Draggable Split Pane Resizer
   const handleStartDragging = (clientX: number) => {
@@ -1810,6 +1765,7 @@ export default function CodeWorkspace({
   // Run Code in Sandbox
   const handleRunCode = () => {
     if (!activeFile) return;
+    setPreviewRefreshToken((value) => value + 1);
     if (!isPreviewOpen || layoutPreset === 'code-only') {
       setIsPreviewOpen(true);
       setLayoutPreset('split-50');
@@ -1825,7 +1781,11 @@ export default function CodeWorkspace({
   };
 
   const handleOpenExternalWindow = () => {
-    const html = compilePreviewBundle();
+    const build = buildVirtualProject(files, activeFile, folders);
+    if (build.errors.length > 0) {
+      onAddToast('error', `${build.errors[0].fileName}: ${build.errors[0].message}`);
+    }
+    const html = build.html;
     const win = window.open('', '_blank', 'width=1100,height=750,menubar=no,toolbar=no,status=no,resizable=yes');
     if (win) {
       win.document.open();
@@ -1864,21 +1824,23 @@ export default function CodeWorkspace({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.1 }}
-        className="livepad-code-shell fixed inset-0 z-50 flex flex-col h-screen w-screen overflow-hidden select-none"
+        className="livepad-code-shell fixed inset-0 z-50 flex flex-col h-screen w-screen overflow-hidden select-none" data-learning-role={isTeachingSession && !canControlCodeMode ? 'student' : 'teacher'}
       >
         {/* Top Workspace Header Bar (Code Studio title bar) */}
         <header className="livepad-code-titlebar h-11 px-2 sm:px-3 flex items-center justify-between shrink-0 z-30 text-xs">
           {/* Left: Window controls & Menu Bar */}
           <div className="flex items-center gap-2 min-w-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="livepad-code-ghost-btn flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer"
-              title="Return to Document Mode"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Back to workspace</span>
-            </button>
+            {(!isTeachingSession || canControlCodeMode) && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="livepad-code-ghost-btn flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer"
+                title="Return to Document Mode"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Back to workspace</span>
+              </button>
+            )}
 
             <div className="h-5 w-px bg-white/10" />
 
@@ -1891,17 +1853,25 @@ export default function CodeWorkspace({
 
           {/* Middle: Active Project Title */}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsProjectModalOpen(true)}
-              className="livepad-code-project-switch flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer min-w-0"
-              title="Switch or create projects"
-            >
-              <img src="/brand/livepad-icon-192.png" alt="" className="w-5 h-5 rounded-md shrink-0" />
-              <span className="hidden sm:inline text-white/50">Project</span>
-              <span className="font-medium max-w-[180px] truncate text-white">{activeProject.name}</span>
-              <ChevronDown className="w-3 h-3 text-[#cccccc]" />
-            </button>
+            {(!isTeachingSession || canControlCodeMode) ? (
+              <button
+                type="button"
+                onClick={() => setIsProjectModalOpen(true)}
+                className="livepad-code-project-switch flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-medium min-w-0 cursor-pointer"
+                title="Switch or create projects"
+              >
+                <img src="/brand/livepad-icon-192.png" alt="" className="w-5 h-5 rounded-md shrink-0" />
+                <span className="hidden sm:inline text-white/50">Project</span>
+                <span className="font-medium max-w-[180px] truncate text-white">{activeProject.name}</span>
+                <ChevronDown className="w-3 h-3 text-[#9aa8ba]" />
+              </button>
+            ) : (
+              <div className="livepad-code-project-readonly" aria-label={`Teacher managed project: ${activeProject.name}`}>
+                <img src="/brand/livepad-icon-192.png" alt="" className="w-5 h-5 rounded-md shrink-0" />
+                <span className="text-[10px] uppercase tracking-[.08em] text-white/35">Class project</span>
+                <span className="max-w-[180px] truncate text-xs font-semibold text-white/80">{activeProject.name}</span>
+              </div>
+            )}
           </div>
 
           {/* Session context: keep the learning model visible without adding another control surface. */}
@@ -1942,7 +1912,7 @@ export default function CodeWorkspace({
               className="livepad-code-run-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
             >
               <Play className="w-3 h-3 fill-current" />
-              <span>{isTeachingSession ? 'Run & Check' : 'Run'}</span>
+              <span>Run preview</span>
             </button>
 
             <button
@@ -1971,7 +1941,7 @@ export default function CodeWorkspace({
               className="livepad-code-icon-btn p-1.5 rounded-lg transition-colors cursor-pointer"
               title="Command Palette (Ctrl+Shift+P)"
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <Command className="w-3.5 h-3.5" />
             </button>
 
             <button
@@ -1985,16 +1955,18 @@ export default function CodeWorkspace({
               <PanelLeft className="w-3.5 h-3.5" />
             </button>
 
-            <button
-              type="button"
-              onClick={() => setIsTerminalOpen(!isTerminalOpen)}
-              className={`livepad-code-icon-btn p-1.5 rounded-lg transition-colors cursor-pointer ${
-                isTerminalOpen ? 'is-active' : ''
-              }`}
-              title="Toggle Terminal (Ctrl+J)"
-            >
-              <Terminal className="w-3.5 h-3.5" />
-            </button>
+            {(!isTeachingSession || canControlCodeMode) && (
+              <button
+                type="button"
+                onClick={() => setIsTerminalOpen(!isTerminalOpen)}
+                className={`livepad-code-icon-btn p-1.5 rounded-lg transition-colors cursor-pointer ${
+                  isTerminalOpen ? 'is-active' : ''
+                }`}
+                title="Toggle Terminal (Ctrl+J)"
+              >
+                <Terminal className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </header>
 
@@ -2005,12 +1977,13 @@ export default function CodeWorkspace({
             activeTab={activityBarTab}
             onSelectTab={(tab) => {
               setActivityBarTab(tab);
-              if (tab === 'trash') setIsRecycleBinOpen(true);
+              if (tab === 'trash' && (!isTeachingSession || canControlCodeMode)) setIsRecycleBinOpen(true);
               if (tab === 'chat') setUnreadChatCount(0);
             }}
             isSidebarOpen={leftSidebarOpen}
             onToggleSidebar={() => setLeftSidebarOpen(!leftSidebarOpen)}
-            onOpenProjects={() => setIsProjectModalOpen(true)}
+            onOpenProjects={(!isTeachingSession || canControlCodeMode) ? () => setIsProjectModalOpen(true) : undefined}
+            showManagementControls={!isTeachingSession || canControlCodeMode}
             unreadChatCount={unreadChatCount}
             learningRole={isTeachingSession ? (canControlCodeMode ? 'teacher' : 'student') : 'peer'}
           />
@@ -2435,6 +2408,7 @@ export default function CodeWorkspace({
                     activeBottomTab="preview"
                     onChangeBottomTab={() => {}}
                     onOpenExternalTab={handleOpenExternalWindow}
+                    refreshToken={previewRefreshToken}
                   />
                 )}
               </div>
@@ -2553,7 +2527,7 @@ export default function CodeWorkspace({
         <CommandPaletteModal
           isOpen={isCommandPaletteOpen}
           onClose={() => setIsCommandPaletteOpen(false)}
-          commands={commandOptions}
+          commands={visibleCommandOptions}
         />
 
         <VersionHistoryModal
@@ -2571,7 +2545,7 @@ export default function CodeWorkspace({
         />
 
         <RecycleBinModal
-          isOpen={isRecycleBinOpen}
+          isOpen={isRecycleBinOpen && (!isTeachingSession || canControlCodeMode)}
           onClose={() => setIsRecycleBinOpen(false)}
           trashItems={trash}
           onRestore={handleRestoreFromTrash}
@@ -2580,7 +2554,7 @@ export default function CodeWorkspace({
         />
 
         <ProjectManagerModal
-          isOpen={isProjectModalOpen}
+          isOpen={isProjectModalOpen && (!isTeachingSession || canControlCodeMode)}
           onClose={() => setIsProjectModalOpen(false)}
           projects={projects}
           activeProjectId={activeProjectId}
@@ -2589,7 +2563,7 @@ export default function CodeWorkspace({
             onAddToast('info', `Switched project.`);
           }}
           onCreateProject={(name, template) => {
-            const projectId = `proj-${Date.now()}`;
+            const projectId = `proj-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}`;
             const now = Date.now();
             const newProj: CodingProject = {
               id: projectId,
@@ -2616,9 +2590,14 @@ export default function CodeWorkspace({
             setActiveFileId(`${projectId}-html`);
             setOpenFileIds(starterFiles.map((file) => file.id));
             setSelectedIds([`${projectId}-html`]);
-            void saveProjectDoc(workspaceId, newProj);
-            starterFiles.forEach((file) => { void saveProjectFileDoc(workspaceId, projectId, file); });
-            onAddToast('success', `Created ${name} with HTML, CSS and JavaScript.`);
+            void Promise.all([
+              saveProjectDoc(workspaceId, newProj),
+              ...starterFiles.map((file) => saveProjectFileDoc(workspaceId, projectId, file))
+            ]).then(() => {
+              onAddToast('success', `Created ${name} with HTML, CSS and JavaScript.`);
+            }).catch(() => {
+              onAddToast('error', 'Project was created locally, but cloud sync failed.');
+            });
           }}
           onRenameProject={(pId, newName) => {
             setProjects((prev) =>
@@ -2632,30 +2611,6 @@ export default function CodeWorkspace({
               })
             );
             onAddToast('info', `Renamed project.`);
-          }}
-          onDuplicateProject={(pId) => {
-            const source = projects.find((p) => p.id === pId);
-            if (!source) return;
-            const dup: CodingProject = {
-              ...source,
-              id: `proj-${Date.now()}`,
-              name: `Copy of ${source.name}`,
-              createdAt: Date.now(),
-              updatedAt: Date.now()
-            };
-            setProjects((prev) => [...prev, dup]);
-            saveProjectDoc(workspaceId, dup);
-            onAddToast('success', `Duplicated project.`);
-          }}
-          onDeleteProject={(pId) => {
-            if (projects.length <= 1) {
-              onAddToast('info', 'Cannot delete the only remaining project.');
-              return;
-            }
-            const remaining = projects.filter((p) => p.id !== pId);
-            setProjects(remaining);
-            if (activeProjectId === pId) setActiveProjectId(remaining[0].id);
-            onAddToast('info', 'Deleted project.');
           }}
         />
 
@@ -2677,7 +2632,7 @@ export default function CodeWorkspace({
         />
 
         <ProfileSelectorModal
-          isOpen={isProfileModalOpen}
+          isOpen={isProfileModalOpen && (!isTeachingSession || canControlCodeMode)}
           onClose={() => setIsProfileModalOpen(false)}
         />
 

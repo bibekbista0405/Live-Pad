@@ -304,3 +304,86 @@
 .livepad-comments-panel form button[type="submit"] { background:#176f82 !important; border-radius:7px !important; box-shadow:none !important; }
 .livepad-comments-panel > div:last-child { padding:10px !important; }
 .livepad-comments-panel > div:last-child > div { background:#111922 !important; border:1px solid rgba(148,163,184,.12) !important; border-radius:10px !important; }
+
+
+/* --------------------------------------------------------------------------
+   Code Studio product chrome — shared overlays and professional controls.
+   No glass cards, gradients, sparkle/AI motifs, or decorative effects.
+   -------------------------------------------------------------------------- */
+.livepad-code-modal-backdrop {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 72px 20px 20px;
+  background: rgba(4, 8, 13, .78);
+  backdrop-filter: blur(3px);
+}
+.livepad-code-modal {
+  width: min(720px, calc(100vw - 40px));
+  max-height: min(760px, calc(100vh - 112px));
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  background: #101720;
+  color: #e8eef5;
+  border: 1px solid rgba(148,163,184,.18);
+  border-radius: 12px;
+  box-shadow: 0 24px 70px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.03) inset;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.livepad-code-modal-search {
+  min-height: 56px; display:flex; align-items:center; gap:10px;
+  padding: 0 14px; background:#0d141c; border-bottom:1px solid var(--lp-border);
+  color:#748398;
+}
+.livepad-code-modal-search input {
+  min-width:0; flex:1; border:0; outline:0; background:transparent;
+  color:#edf3f8; font: 13px/1.4 Inter, sans-serif;
+}
+.livepad-code-modal-search input::placeholder { color:#627187; }
+.livepad-code-modal-search kbd,
+.livepad-code-modal-footer kbd,
+.livepad-command-row kbd {
+  border:1px solid rgba(148,163,184,.16); background:#141e29; color:#8493a7;
+  border-radius:5px; padding:3px 6px; font: 10px/1 JetBrains Mono, ui-monospace, monospace; white-space:nowrap;
+}
+.livepad-code-modal-search button { width:28px; height:28px; display:grid; place-items:center; border:0; border-radius:7px; background:transparent; color:#748398; cursor:pointer; }
+.livepad-code-modal-search button:hover { background:#18232e; color:#edf3f8; }
+.livepad-command-list { padding:8px; overflow:auto; min-height:0; }
+.livepad-command-row {
+  width:100%; min-height:52px; display:flex; align-items:center; gap:11px; padding:8px 10px;
+  border:1px solid transparent; border-radius:8px; background:transparent; color:#dce5ed; text-align:left; cursor:pointer;
+}
+.livepad-command-row:hover, .livepad-command-row.is-selected { background:#17212b; border-color:rgba(56,198,223,.16); }
+.livepad-command-icon { width:32px; height:32px; display:grid; place-items:center; flex:0 0 32px; border-radius:7px; background:#141e28; color:#8aa0b5; }
+.livepad-command-row.is-selected .livepad-command-icon { color:#73d7e8; background:#12303a; }
+.livepad-command-copy { min-width:0; flex:1; display:flex; flex-direction:column; gap:3px; }
+.livepad-command-copy strong { font-size:12px; font-weight:600; color:#e7eef5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.livepad-command-copy small { font-size:9px; color:#66768a; text-transform:uppercase; letter-spacing:.08em; }
+.livepad-code-modal-footer { min-height:34px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 12px; border-top:1px solid var(--lp-border); background:#0d141c; color:#627187; font-size:9px; }
+.livepad-code-modal-footer strong { color:#93a3b6; font-weight:600; }
+.livepad-code-empty-state { min-height:180px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; color:#64748b; text-align:center; }
+.livepad-code-empty-state strong { color:#b9c6d4; font-size:12px; font-weight:600; }
+.livepad-code-empty-state span { color:#66768a; font-size:10px; }
+.livepad-project-manager, .livepad-recycle-bin, .livepad-profile-modal { width:min(860px,calc(100vw - 40px)); }
+.livepad-version-history { width:min(1120px,calc(100vw - 40px)); height:min(760px,calc(100vh - 112px)); max-height:none; }
+.livepad-search-files { width:min(900px,calc(100vw - 40px)); }
+.livepad-quick-open { width:min(680px,calc(100vw - 40px)); }
+.livepad-code-modal button, .livepad-code-modal input, .livepad-code-modal textarea, .livepad-code-modal select { font-family:Inter, ui-sans-serif, system-ui, sans-serif; }
+
+/* Replace decorative AI/sparkle affordances in retained legacy surfaces. */
+.livepad-code-shell .animate-pulse { animation: none !important; }
+.livepad-code-shell .bg-gradient-to-r { background-image: none !important; }
+
+/* Student view in a teacher-led room: project/session management stays with teacher. */
+.livepad-code-shell[data-learning-role="student"] .livepad-code-project-switch { opacity:.78; }
+.livepad-code-shell[data-learning-role="student"] .livepad-code-project-switch svg { display:none; }
+
+@media (max-width: 700px) {
+  .livepad-code-modal-backdrop { padding: 56px 10px 10px; }
+  .livepad-code-modal { width:100%; max-height:calc(100vh - 66px); border-radius:10px; }
+  .livepad-code-modal-footer { display:none; }
+}
+
+.livepad-code-project-readonly{display:flex;align-items:center;gap:7px;min-height:34px;padding:0 10px;border:1px solid var(--lp-border);border-radius:9px;background:#111922;color:#dce5ed;}
+.livepad-code-project-readonly img{width:20px;height:20px;}
+.livepad-project-starter-files{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding-top:2px;color:#68798c;font-size:9px}
+.livepad-project-starter-files>span:not(:first-child){display:inline-flex;align-items:center;gap:5px;padding:5px 7px;border:1px solid rgba(148,163,184,.12);border-radius:6px;background:#111922;color:#aebdca}

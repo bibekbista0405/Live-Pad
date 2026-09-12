@@ -77,6 +77,8 @@ export function CommentsPanel({
   const [replyInputText, setReplyInputText] = useState<Record<string, string>>({});
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
+  const openThreadCount = threads.filter((thread) => thread.status === 'open').length;
+
   const filteredThreads = threads.filter(t => {
     if (filterStatus === 'open') return t.status === 'open';
     if (filterStatus === 'resolved') return t.status === 'resolved';
@@ -117,14 +119,14 @@ export function CommentsPanel({
       {/* Header */}
       <div className="p-3 bg-slate-950/80 dark:bg-black/50 border-b border-slate-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-amber-500/10 text-amber-400 rounded-lg">
+          <div className="p-1.5 bg-cyan-500/10 text-cyan-300 rounded-lg">
             <MessageSquarePlus className="w-4 h-4" />
           </div>
           <div>
             <h3 className="text-xs font-bold flex items-center gap-1.5">
               Code discussion
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-mono">
-                {threads.length} open threads
+                {openThreadCount} open threads
               </span>
             </h3>
             <p className="text-[10px] text-slate-400 truncate max-w-[200px]">
@@ -151,7 +153,7 @@ export function CommentsPanel({
               onClick={() => setFilterStatus(st)}
               className={`px-2 py-0.5 rounded-lg capitalize text-[10px] font-bold transition-colors ${
                 filterStatus === st
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  ? 'bg-cyan-500/10 text-cyan-200 border border-cyan-500/20'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -165,7 +167,7 @@ export function CommentsPanel({
       <form onSubmit={handleCreateThread} className="p-3 bg-slate-950/90 border-b border-slate-800 space-y-2">
         <div className="flex items-center justify-between text-[11px]">
           <span className="font-bold text-slate-300 flex items-center gap-1">
-            <Code2 className="w-3.5 h-3.5 text-amber-400" />
+            <Code2 className="w-3.5 h-3.5 text-cyan-300" />
             {activeLineNumber ? `Line ${activeLineNumber} Comment` : 'Add File Comment'}
           </span>
           {selectedText && (
@@ -179,14 +181,14 @@ export function CommentsPanel({
           value={newCommentText}
           onChange={(e) => setNewCommentText(e.target.value)}
           placeholder="Ask a question or explain what should change..."
-          className="w-full h-16 bg-slate-900 border border-slate-700/80 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none"
+          className="w-full h-16 bg-slate-900 border border-slate-700/80 rounded-xl p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 resize-none"
         />
 
         <div className="flex items-center justify-end">
           <button
             type="submit"
             disabled={!newCommentText.trim()}
-            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5"
+            className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 disabled:opacity-40 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5"
           >
             <Send className="w-3.5 h-3.5" /> Post comment
           </button>
@@ -302,7 +304,7 @@ export function CommentsPanel({
                     <button
                       onClick={() => handleCreateReply(thread.id)}
                       disabled={!replyInputText[thread.id]?.trim()}
-                      className="p-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-amber-400 rounded-lg transition-colors"
+                      className="p-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-cyan-300 rounded-lg transition-colors"
                     >
                       <CornerDownRight className="w-3.5 h-3.5" />
                     </button>

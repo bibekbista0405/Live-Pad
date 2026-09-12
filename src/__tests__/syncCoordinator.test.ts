@@ -2,13 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { SyncCoordinator } from '../sync/syncCoordinator';
 
 describe('Phase 4 sync coordinator', () => {
-  it('prevents overlapping sync runs', async () => {
+  it('serializes overlapping sync runs instead of dropping the second task', async () => {
     const coordinator = new SyncCoordinator({ baseDelayMs: 1, maxRetries: 0 });
     let release!: () => void;
     const first = coordinator.run({ id: 'first', run: () => new Promise<void>((resolve) => { release = resolve; }) });
-    expect(await coordinator.run({ id: 'second', run: async () => undefined })).toBe(false);
+    const second = coordinator.run({ id: 'second', run: async () => undefined });
+
+    await Promise.resolve();
+    expect(coordinator.isRunning).toBe(true);
     release();
     expect(await first).toBe(true);
+    expect(await second).toBe(true);
   });
 
   it('retries transient failures with bounded backoff', async () => {

@@ -122,6 +122,7 @@ import {
   ProblemDiagnostic
 } from '../types/code';
 import { getWorkspaceDiagnostics } from '../utils/virtualProjectBuilder';
+import { parseVitestJsonReport, parseV8Coverage } from '../services/vitestResults';
 import {
   saveLocalProjectData,
   loadLocalProjectData,
@@ -407,6 +408,10 @@ export default function CodeWorkspace({
       return;
     }
     const configObj = runConfigurations.find(c => c.id === activeConfigId) || runConfigurations[0];
+    if (configObj.type !== 'node') {
+      onAddToast('info', `${configObj.type.toUpperCase()} debugging is not supported by the current Electron debugger. Select a Node.js configuration.`);
+      return;
+    }
     const recentProjects = await Platform.getRecentProjects();
     const root = recentProjects[0]?.path;
     const scriptPath = activeFile?.path
@@ -428,6 +433,16 @@ export default function CodeWorkspace({
       setDebugSessionId(result.sessionId);
       setDebugStatus('running');
       appendDebugLog('info', `[Debugger] Session ${result.sessionId} launched on inspector port ${result.port}.`);
+      for (const breakpoint of breakpoints.filter((item) => item.enabled)) {
+        try {
+          const applied = await Platform.setDebuggerBreakpoint(result.sessionId, `${root || ''}/${breakpoint.filePath}`.replace(/\\/g, '/'), breakpoint.lineNumber);
+          if (applied.verified) {
+            setBreakpoints((prev) => prev.map((item) => item.id === breakpoint.id ? { ...item, id: applied.id } : item));
+          }
+        } catch (error) {
+          appendDebugLog('error', `[Debugger] Breakpoint ${breakpoint.filePath}:${breakpoint.lineNumber} could not be restored: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
     } catch (error) {
       setDebugStatus('stopped');
       appendDebugLog('error', `[Debugger] ${error instanceof Error ? error.message : String(error)}`);
@@ -512,25 +527,51 @@ export default function CodeWorkspace({
     return () => { offOutput(); offEvent(); };
   }, [debugSessionId]);
 
-  const handleToggleBreakpointAtLine = (lineNumber: number) => {
+  const handleToggleBreakpointAtLine = async (lineNumber: number) => {
     const curPath = activeFile?.path || 'src/App.tsx';
     const curId = activeFileId || 'file-1';
-
     const existing = breakpoints.find((b) => b.filePath === curPath && b.lineNumber === lineNumber);
     if (existing) {
+      if (debugSessionId && !existing.id.startsWith('bp-')) {
+        const removed = await Platform.removeDebuggerBreakpoint(debugSessionId, existing.id);
+        if (!removed) {
+          onAddToast('error', `Could not remove the active debugger breakpoint on line ${lineNumber}.`);
+          return;
+        }
+      }
       setBreakpoints((prev) => prev.filter((b) => b.id !== existing.id));
       onAddToast('info', `Removed breakpoint on line ${lineNumber}`);
-    } else {
-      const created: Breakpoint = {
-        id: `bp-${Date.now()}`,
-        fileId: curId,
-        filePath: curPath,
-        lineNumber,
-        enabled: true
-      };
-      setBreakpoints((prev) => [...prev, created]);
-      onAddToast('success', `Added breakpoint on line ${lineNumber}`);
+      return;
     }
+
+    const created: Breakpoint = {
+      id: `bp-${Date.now()}`,
+      fileId: curId,
+      filePath: curPath,
+      lineNumber,
+      enabled: true
+    };
+    if (debugSessionId) {
+      const recentProjects = await Platform.getRecentProjects();
+      const root = recentProjects[0]?.path;
+      if (!root) {
+        onAddToast('error', 'Open a desktop project folder before adding a live breakpoint.');
+        return;
+      }
+      try {
+        const applied = await Platform.setDebuggerBreakpoint(debugSessionId, `${root}/${curPath}`.replace(/\\/g, '/'), lineNumber);
+        if (!applied.verified) {
+          onAddToast('error', `Debugger could not verify breakpoint on line ${lineNumber}.`);
+          return;
+        }
+        created.id = applied.id;
+      } catch (error) {
+        onAddToast('error', error instanceof Error ? error.message : String(error));
+        return;
+      }
+    }
+    setBreakpoints((prev) => [...prev, created]);
+    onAddToast('success', `Added breakpoint on line ${lineNumber}`);
   };
 
   const handleEvalDebugExpression = async (expr: string) => {
@@ -548,7 +589,82 @@ export default function CodeWorkspace({
     }
   };
 
-  // Test Runner Action Handlers — always execute the real project test command.
+  // Test Runner — backed by the real project's Vitest JSON + V8 coverage reports.
+  const getDesktopProjectRoot = async (): Promise<string | null> => {
+    const recentProjects = await Platform.getRecentProjects();
+    return recentProjects[0]?.path || null;
+  };
+
+  const quoteCommandArg = (value: string): string => {
+    if (Platform.os === 'windows') return `"${value.replace(/"/g, '\\"')}"`;
+    return `'${value.replace(/'/g, `'"'"'`)}'`;
+  };
+
+  const runVitest = async (options: { testFile?: string; testName?: string; coverage?: boolean }): Promise<void> => {
+    const root = await getDesktopProjectRoot();
+    if (!root) throw new Error('Open a desktop project folder before running tests.');
+
+    const outputDir = '.livepad';
+    const resultPath = `${outputDir}/test-results.json`;
+    const coveragePath = `${outputDir}/coverage/coverage-final.json`;
+    const args = [
+      'npm test -- --run --reporter=json',
+      `--outputFile=${quoteCommandArg(resultPath)}`,
+    ];
+    if (options.coverage) {
+      args.push('--coverage', '--coverage.reporter=json', `--coverage.reportsDirectory=${quoteCommandArg(`${outputDir}/coverage`)}`);
+    }
+    if (options.testFile) args.push(quoteCommandArg(options.testFile));
+    if (options.testName) args.push('-t', quoteCommandArg(options.testName));
+
+    const command = `node -e "require('fs').mkdirSync('${outputDir.replace(/'/g, "\\'")}', { recursive: true })" && ${args.join(' ')}`;
+    const processId = `livepad-test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    await new Promise<void>((resolve, reject) => {
+      let output = '';
+      let settled = false;
+      let offOutput = () => {};
+      let offExit = () => {};
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        offOutput();
+        offExit();
+        error ? reject(error) : resolve();
+      };
+      offOutput = Platform.onTerminalOutput((data) => {
+        if (data.processId !== processId) return;
+        output += data.data;
+        if (output.length > 2_000_000) output = output.slice(-2_000_000);
+        appendDebugLog(data.type === 'stderr' ? 'error' : 'info', data.data.trimEnd());
+      });
+      offExit = Platform.onTerminalExit(async (data) => {
+        if (data.processId !== processId) return;
+        try {
+          const report = await Platform.readWorkspaceFile(`${root}/${resultPath}`.replace(/\\/g, '/'));
+          if (!report?.content) throw new Error(`Vitest did not produce ${resultPath}. ${output.slice(-1000)}`);
+          const suites = parseVitestJsonReport(report.content);
+          setTestSuites(suites);
+          const selected = suites.flatMap((suite) => suite.cases).find((test) => test.status === 'failed') || suites.flatMap((suite) => suite.cases)[0];
+          setSelectedTestCaseId(selected?.id || null);
+
+          if (options.coverage) {
+            const coverage = await Platform.readWorkspaceFile(`${root}/${coveragePath}`.replace(/\\/g, '/'));
+            if (coverage?.content) setCoverageReport(parseV8Coverage(coverage.content));
+            else setCoverageReport({ overall: { statementsPct: 0, branchesPct: 0, functionsPct: 0, linesPct: 0 }, files: [] });
+          }
+          if (data.code !== 0) reject(new Error(`Vitest exited with code ${data.code}`));
+          else resolve();
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        } finally {
+          finish();
+        }
+      });
+      Platform.executeCommand(command, root, processId).catch((error) => finish(error instanceof Error ? error : new Error(String(error))));
+    });
+  };
+
   const handleRunAllTests = async () => {
     if (!Platform.isElectron) {
       onAddToast('info', 'Running project tests requires the LivePad Desktop Edition.');
@@ -556,35 +672,69 @@ export default function CodeWorkspace({
     }
     if (isTesting) return;
     setIsTesting(true);
-    setTestSuites([{ id: 'vitest-run', name: 'Vitest project test run', fileId: '', filePath: '', status: 'running', cases: [] }]);
+    setTestSuites([]);
     setSelectedTestCaseId(null);
     setCoverageReport({ overall: { statementsPct: 0, branchesPct: 0, functionsPct: 0, linesPct: 0 }, files: [] });
-    appendDebugLog('info', '[Tests] Running npm test -- --run ...');
-    const processId = `livepad-test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    let offOutput = () => {};
-    let offExit = () => {};
-    offOutput = Platform.onTerminalOutput((data) => {
-      if (data.processId !== processId) return;
-      appendDebugLog(data.type === 'stderr' ? 'error' : 'info', data.data.trimEnd());
-    });
-    offExit = Platform.onTerminalExit((data) => {
-      if (data.processId !== processId) return;
-      offOutput();
-      offExit();
-      setIsTesting(false);
-      setTestSuites([{ id: 'vitest-run', name: 'Vitest project test run', fileId: '', filePath: '', status: data.code === 0 ? 'passed' : 'failed', cases: [] }]);
-      onAddToast(data.code === 0 ? 'success' : 'error', data.code === 0 ? 'Tests passed.' : `Tests failed with exit code ${data.code}.`);
-    });
+    appendDebugLog('info', '[Tests] Running the real Vitest suite with JSON results and V8 coverage...');
     try {
-      await Platform.executeCommand('npm test -- --run', undefined, processId);
-    } catch (error) {
-      offOutput();
-      offExit();
+      await runVitest({ coverage: true });
       setIsTesting(false);
-      setTestSuites([{ id: 'vitest-run', name: 'Vitest project test run', fileId: '', filePath: '', status: 'failed', cases: [] }]);
+      onAddToast('success', 'Tests and coverage completed.');
+    } catch (error) {
+      setIsTesting(false);
       onAddToast('error', error instanceof Error ? error.message : String(error));
     }
   };
+
+  const handleRunTestCase = async (caseId: string) => {
+    if (!Platform.isElectron || isTesting) return;
+    const testCase = testSuites.flatMap((suite) => suite.cases).find((test) => test.id === caseId);
+    if (!testCase) return;
+    setIsTesting(true);
+    try {
+      await runVitest({ testFile: testCase.filePath, testName: testCase.name });
+      onAddToast('success', `Test completed: ${testCase.name}`);
+    } catch (error) {
+      onAddToast('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleRunFailedTests = async () => {
+    if (!Platform.isElectron || isTesting) return;
+    const failed = testSuites.flatMap((suite) => suite.cases.filter((test) => test.status === 'failed'));
+    if (failed.length === 0) return;
+    setIsTesting(true);
+    try {
+      const files = [...new Set(failed.map((test) => test.filePath).filter(Boolean))];
+      const names = [...new Set(failed.map((test) => test.name))];
+      const escapedNames = names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+      const pattern = names.length === 1 ? names[0] : `(${escapedNames})`;
+      await runVitest({ testFile: files.length === 1 ? files[0] : undefined, testName: pattern });
+      onAddToast('success', 'Previously failed tests completed.');
+    } catch (error) {
+      onAddToast('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleRunSuite = async (suiteId: string) => {
+    if (!Platform.isElectron || isTesting) return;
+    const suite = testSuites.find((item) => item.id === suiteId);
+    if (!suite) return;
+    setIsTesting(true);
+    try {
+      await runVitest({ testFile: suite.filePath });
+      onAddToast('success', `Test suite completed: ${suite.name}`);
+    } catch (error) {
+      onAddToast('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isQuickOpenOpen, setIsQuickOpenOpen] = useState(false);
@@ -1929,9 +2079,9 @@ export default function CodeWorkspace({
                     selectedTestCaseId={selectedTestCaseId}
                     onSelectTestCase={(c) => setSelectedTestCaseId(c.id)}
                     onRunAllTests={handleRunAllTests}
-                    onRunFailedTests={handleRunAllTests}
-                    onRunSuite={handleRunAllTests}
-                    onRunTestCase={handleRunAllTests}
+                    onRunFailedTests={handleRunFailedTests}
+                    onRunSuite={handleRunSuite}
+                    onRunTestCase={handleRunTestCase}
                     isTesting={isTesting}
                     showCoverageOverlay={showCoverageOverlay}
                     onToggleCoverageOverlay={() => setShowCoverageOverlay((prev) => !prev)}

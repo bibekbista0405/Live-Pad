@@ -24,7 +24,7 @@ Turn LivePad's desktop coding workspace into a real, security-bounded developmen
 4. Reworked debugger expression evaluation to use the same request/response command path with a bounded timeout.
 5. Preserved the existing workspace, terminal, Git, PWA, AI, and collaboration features.
 
-## Remaining Phase 5 targets
+## Phase 5 completion targets
 
 - Add dedicated Electron IPC integration tests.
 - Parse real per-test runner results rather than reporting only process-level status.

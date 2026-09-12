@@ -11,6 +11,7 @@ export interface LivePadElectronAPI {
   openFolder: () => Promise<string | null>;
   saveFile: (content: string, defaultName?: string, filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
   readFile: (filePath?: string) => Promise<{ path: string; content: string } | null>;
+  readWorkspaceFile: (filePath: string) => Promise<{ path: string; content: string } | null>;
   showMessageBox: (options: { type?: 'info' | 'error' | 'warning' | 'question'; title: string; message: string; buttons?: string[] }) => Promise<number>;
   showNotification: (title: string, body: string, icon?: string) => Promise<boolean>;
   openExternal: (url: string) => Promise<boolean>;
@@ -65,6 +66,7 @@ export interface LivePadElectronAPI {
   launchDebugger: (payload: { scriptPath: string; cwd?: string; args?: string[] }) => Promise<{ sessionId: string; port: number; status: string }>;
   controlDebugger: (sessionId: string, action: 'resume' | 'stepOver' | 'stepInto' | 'stepOut' | 'pause' | 'stop') => Promise<boolean>;
   setDebuggerBreakpoint: (sessionId: string, file: string, line: number) => Promise<{ verified: boolean; id: string }>;
+  removeDebuggerBreakpoint: (sessionId: string, breakpointId: string) => Promise<boolean>;
   evaluateDebugger: (sessionId: string, expression: string) => Promise<any>;
   onDebuggerOutput: (callback: (data: { sessionId: string; type: 'stdout' | 'stderr'; data: string }) => void) => () => void;
   onDebuggerEvent: (callback: (data: { sessionId: string; event: string; details?: any; port?: number }) => void) => () => void;
@@ -86,6 +88,7 @@ const electronBridge: LivePadElectronAPI = {
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
   saveFile: (content, defaultName, filters) => ipcRenderer.invoke('dialog:saveFile', { content, defaultName, filters }),
   readFile: (filePath) => ipcRenderer.invoke('dialog:readFile', filePath),
+  readWorkspaceFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
   showMessageBox: (options) => ipcRenderer.invoke('dialog:showMessage', options),
   showNotification: (title, body, icon) => ipcRenderer.invoke('notification:show', { title, body, icon }),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
@@ -164,6 +167,7 @@ const electronBridge: LivePadElectronAPI = {
   launchDebugger: (payload) => ipcRenderer.invoke('debugger:launch', payload),
   controlDebugger: (sessionId, action) => ipcRenderer.invoke('debugger:control', sessionId, action),
   setDebuggerBreakpoint: (sessionId, file, line) => ipcRenderer.invoke('debugger:setBreakpoint', sessionId, file, line),
+  removeDebuggerBreakpoint: (sessionId, breakpointId) => ipcRenderer.invoke('debugger:removeBreakpoint', sessionId, breakpointId),
   evaluateDebugger: (sessionId, expression) => ipcRenderer.invoke('debugger:evaluate', sessionId, expression),
   onDebuggerOutput: (callback) => {
     const handler = (_event: any, data: any) => callback(data);

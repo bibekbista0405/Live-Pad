@@ -64,6 +64,11 @@ export class ElectronPlatform implements IPlatformServices {
     return this.fallbackBrowser.saveFile(content, defaultName);
   }
 
+  public async readWorkspaceFile(filePath: string): Promise<ReadFileResult | null> {
+    if (!this.bridge) return null;
+    return await this.bridge.readWorkspaceFile(filePath);
+  }
+
   public async readFile(filePath?: string): Promise<ReadFileResult | null> {
     if (this.bridge) {
       try {
@@ -420,6 +425,11 @@ export class ElectronPlatform implements IPlatformServices {
       return await this.bridge.setDebuggerBreakpoint(sessionId, file, line);
     }
     return this.fallbackBrowser.setDebuggerBreakpoint();
+  }
+
+  public async removeDebuggerBreakpoint(sessionId: string, breakpointId: string): Promise<boolean> {
+    if (!this.bridge) return false;
+    return await this.bridge.removeDebuggerBreakpoint(sessionId, breakpointId);
   }
 
   public async evaluateDebugger(sessionId: string, expression: string): Promise<any> {

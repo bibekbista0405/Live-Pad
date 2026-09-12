@@ -57,6 +57,7 @@ export interface IPlatformServices {
   openFolder(): Promise<string | null>;
   saveFile(content: string, defaultName?: string, filters?: FileFilterOption[]): Promise<string | null>;
   readFile(filePath?: string): Promise<ReadFileResult | null>;
+  readWorkspaceFile(filePath: string): Promise<ReadFileResult | null>;
 
   // Native Filesystem Services (Electron) / Virtual JS Fallback (Web)
   readDir(dirPath: string, recursive?: boolean): Promise<DirectoryItem[]>;
@@ -102,6 +103,7 @@ export interface IPlatformServices {
   launchDebugger(payload: { scriptPath: string; cwd?: string; args?: string[] }): Promise<{ sessionId: string; port: number; status: string }>;
   controlDebugger(sessionId: string, action: 'resume' | 'stepOver' | 'stepInto' | 'stepOut' | 'pause' | 'stop'): Promise<boolean>;
   setDebuggerBreakpoint(sessionId: string, file: string, line: number): Promise<{ verified: boolean; id: string }>;
+  removeDebuggerBreakpoint(sessionId: string, breakpointId: string): Promise<boolean>;
   evaluateDebugger(sessionId: string, expression: string): Promise<any>;
   onDebuggerOutput(callback: (data: { sessionId: string; type: 'stdout' | 'stderr'; data: string }) => void): () => void;
   onDebuggerEvent(callback: (data: { sessionId: string; event: string; details?: any; port?: number }) => void): () => void;

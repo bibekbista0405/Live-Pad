@@ -48,3 +48,15 @@ The future intro video is intentionally deferred; the current lightweight animat
 - Debugger WebSocket close events now clear the session transport reference and notify the renderer of disconnects.
 - Existing workspace-root and renderer ownership checks remain enforced.
 - No simulated debugger state or success path was introduced.
+
+## Phase 5 completion pass — real Test Explorer + coverage
+
+- Test Explorer now consumes Vitest's real JSON reporter output instead of synthetic test rows.
+- Individual test and suite actions execute the selected file/test against the desktop workspace.
+- Run All Tests executes the real project test command with V8 coverage enabled.
+- Coverage is parsed from Vitest's generated V8 `coverage-final.json` and rendered in the existing coverage UI.
+- Added a workspace-scoped Electron file-read bridge for generated test artifacts; no unrestricted renderer filesystem read was introduced.
+- Added parser unit tests covering failed assertions, locations, durations, and V8 statement/function/branch/line coverage.
+- Added `@vitest/coverage-v8` pinned to the installed Vitest version.
+
+Phase 5 status: **Complete — Coding Workspace + Electron foundation delivered; desktop-only boundaries remain explicit for native capabilities.**

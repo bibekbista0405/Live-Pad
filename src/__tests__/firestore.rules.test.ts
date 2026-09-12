@@ -36,10 +36,20 @@ const room = (overrides: Record<string, unknown> = {}) => ({
 beforeAll(async () => {
   if (!emulatorAvailable) return;
   const rules = fs.readFileSync(path.resolve('firestore.rules'), 'utf8');
-  testEnv = await initializeTestEnvironment({
-    projectId: PROJECT_ID,
-    firestore: { rules },
-  });
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      testEnv = await initializeTestEnvironment({
+        projectId: PROJECT_ID,
+        firestore: { rules },
+      });
+      break;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 4) throw lastError;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+    }
+  }
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'rooms/ROOM1'), room());
     await setDoc(doc(ctx.firestore(), 'rooms/PUBLIC1'), room({ roomCode: 'PUBLIC1', privacy: 'public', participants: { owner: { uid: 'owner', role: 'owner' } }, defaultRole: 'member' }));

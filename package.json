@@ -80,6 +80,7 @@
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "4.1.11",
     "@firebase/rules-unit-testing": "^3.0.4",
+    "@vitest/coverage-v8": "4.1.11",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0"
   }

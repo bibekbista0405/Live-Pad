@@ -258,57 +258,47 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
 
       // Normal members can edit content/title/label and their own presence.
-      // Owners/admins additionally manage members and lifecycle settings.
+      // Keep ordinary edits before specialized join/transfer branches so they can
+      // short-circuit without evaluating unrelated authorization paths.
       allow update: if signedIn()
         && request.resource.data.createdAt == resource.data.createdAt
+        && canEditData(resource.data)
+        && validRoomUpdate(resource.data, request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'content', 'updatedAt', 'title', 'label', 'attachments',
+          'users', 'typingUsers', 'participants', 'lastClientId', 'lastTxId'
+        ])
         && (
-          (
-            validRoomUpdate(resource.data, request.resource.data)
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'content', 'updatedAt', 'title', 'label', 'attachments',
-              'users', 'typingUsers', 'participants', 'lastClientId', 'lastTxId'
-            ])
-            && (
-              (
-                (isOwnerData(resource.data) || isAdminData(resource.data) || (
-                  isMemberData(resource.data)
-                  && resource.data.participants[request.auth.uid].role in [
-                    'editor','collaborator','teacher','instructor','member','developer','student'
-                  ]
-                ))
-                && (
-                  selfPresenceOnly(resource.data, request.resource.data)
-                  || (
-                    request.resource.data.updatedAt == request.time
-                    && (
-                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['users', 'typingUsers', 'participants'])
-                      || selfPresenceOnly(resource.data, request.resource.data)
-                    )
-                  )
-                )
-              )
-              || isPublicSelfJoin()
-            )
-          )
+          selfPresenceOnly(resource.data, request.resource.data)
           || (
-            isAdminData(resource.data)
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'updatedAt', 'privacy', 'status', 'participantLimit', 'permissions',
-              'editingPolicy', 'codeExecutionEnabled', 'voiceChatEnabled',
-              'chatEnabled', 'defaultRole', 'expiresAt', 'workspaceName', 'title', 'label',
-              'attachments', 'ownerName', 'workspaceRoleVersion'
-            ])
-            && !ownershipFieldsChanged()
-            && request.resource.data.updatedAt == request.time
-          )
-          || (
-            validOwnerTransfer()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'updatedAt', 'ownerId', 'creatorId', 'creatorRole', 'participants', 'users'
-            ])
-            && request.resource.data.updatedAt == request.time
+            request.resource.data.updatedAt == request.time
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['users', 'typingUsers', 'participants'])
           )
         );
+
+      // Public rooms allow a caller to add only their own participant entry.
+      allow update: if isPublicSelfJoin();
+
+      // Owners/admins manage lifecycle and workspace settings.
+      allow update: if signedIn()
+        && request.resource.data.createdAt == resource.data.createdAt
+        && isAdminData(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'updatedAt', 'privacy', 'status', 'participantLimit', 'permissions',
+          'editingPolicy', 'codeExecutionEnabled', 'voiceChatEnabled',
+          'chatEnabled', 'defaultRole', 'expiresAt', 'workspaceName', 'title', 'label',
+          'attachments', 'ownerName', 'workspaceRoleVersion'
+        ])
+        && !ownershipFieldsChanged()
+        && request.resource.data.updatedAt == request.time;
+
+      // Ownership transfer is a separate, tightly constrained operation.
+      allow update: if signedIn()
+        && validOwnerTransfer()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'updatedAt', 'ownerId', 'creatorId', 'creatorRole', 'participants', 'users'
+        ])
+        && request.resource.data.updatedAt == request.time;
 
       // Workspace deletion is intentionally a soft-delete operation.
       allow delete: if false;

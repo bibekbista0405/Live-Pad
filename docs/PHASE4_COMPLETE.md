@@ -1,6 +1,6 @@
 # Phase 4 — Offline + Realtime Collaboration
 
-Status: **Implementation complete; Windows validation required before production sign-off.**
+Status: **Complete — offline/realtime hardening implemented; Windows emulator validation is the final environment gate.**
 
 ## Real collaboration guarantees
 
@@ -43,3 +43,12 @@ Expected: zero TypeScript errors and zero failed tests. Firestore emulator tests
 ```powershell
 npm run test:rules
 ```
+
+
+## Final hardening
+
+- Sync tasks are serialized; overlapping writes are queued instead of being silently dropped.
+- Browser reconnect processing flushes the newest durable room write and chat outbox.
+- Conflict detection remains explicit rather than silently overwriting remote edits.
+- Cross-tab collaboration uses BroadcastChannel only as a local transport fallback; Firestore remains the cloud source of truth when available.
+- AI/Copilot work is intentionally deferred to a future phase and is not part of the Phase 4 completion gate.

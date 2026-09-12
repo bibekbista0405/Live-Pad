@@ -168,7 +168,7 @@ export function setupDebuggerIPC() {
         child.on('close', (code) => {
           session.ws?.close();
           activeSessions.delete(sessionId);
-          if (win && !win.isDestroyed()) win.webContents.send('debugger:event', { sessionId, event: 'terminated', exitCode: code });
+          if (win && !win.isDestroyed()) win.webContents.send('debugger:event', { sessionId, event: 'terminated', details: { exitCode: code } });
         });
         child.on('error', (error) => {
           activeSessions.delete(sessionId);
@@ -226,6 +226,20 @@ export function setupDebuggerIPC() {
     } catch (error) {
       console.error('Debugger breakpoint failed:', error);
       return { verified: false, id };
+    }
+  });
+
+  ipcMain.handle('debugger:removeBreakpoint', async (event, sessionId: string, breakpointId: string) => {
+    const session = activeSessions.get(sessionId);
+    if (!session || session.webContentsId !== event.sender.id || !session.ws || session.ws.readyState !== WebSocket.OPEN) return false;
+    if (typeof breakpointId !== 'string' || breakpointId.length > 512) return false;
+    try {
+      await sendDebuggerCommand(session, 'Debugger.removeBreakpoint', { breakpointId });
+      session.breakpoints = session.breakpoints.filter((bp) => bp.id !== breakpointId);
+      return true;
+    } catch (error) {
+      console.error('Debugger breakpoint removal failed:', error);
+      return false;
     }
   });
 

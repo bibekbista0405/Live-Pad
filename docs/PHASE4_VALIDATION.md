@@ -1,6 +1,6 @@
 # Phase 4 Validation
 
-Phase 4 implementation includes durable offline outboxes, serialized/retried sync, realtime presence heartbeat handling, and real platform-bound test/debug execution.
+Phase 4 implementation includes durable offline outboxes, serialized/retried sync, realtime presence heartbeat handling, reconnect recovery, conflict detection, cross-tab transport, and real platform-bound test/debug execution.
 
 Validation gate:
 - `npm run lint` must report 0 TypeScript errors.

@@ -11,10 +11,13 @@ export interface SyncCoordinatorOptions {
   maxRetries?: number;
 }
 
-/** Serializes background sync work and applies bounded exponential backoff. */
+/** Serializes sync work and applies bounded exponential backoff. Calls made while
+ * another task is running are queued instead of being silently dropped. */
 export class SyncCoordinator {
   private running = false;
   private scheduled = false;
+  private queueDepth = 0;
+  private chain: Promise<boolean> = Promise.resolve(true);
   private readonly baseDelayMs: number;
   private readonly maxDelayMs: number;
   private readonly maxRetries: number;
@@ -31,12 +34,11 @@ export class SyncCoordinator {
 
   get state(): SyncState {
     if (this.running) return 'running';
-    if (this.scheduled) return 'waiting';
+    if (this.scheduled || this.queueDepth > 0) return 'waiting';
     return 'idle';
   }
 
-  async run(task: SyncTask): Promise<boolean> {
-    if (this.running) return false;
+  private async execute(task: SyncTask): Promise<boolean> {
     this.running = true;
     try {
       for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
@@ -52,14 +54,27 @@ export class SyncCoordinator {
       return false;
     } finally {
       this.running = false;
-      this.scheduled = false;
     }
   }
 
+  run(task: SyncTask): Promise<boolean> {
+    this.queueDepth += 1;
+    const next = this.chain.then(async () => {
+      this.queueDepth = Math.max(0, this.queueDepth - 1);
+      return this.execute(task);
+    });
+    // Keep the queue alive after a rejected task while preserving the rejection
+    // for the caller that owns that task.
+    this.chain = next.then(() => true, () => false);
+    return next;
+  }
+
   schedule(task: SyncTask, delayMs = 0): void {
-    if (this.scheduled || this.running) return;
+    if (this.scheduled) return;
     this.scheduled = true;
-    window.setTimeout(() => {
+    const scheduleWindow = typeof window !== 'undefined' ? window : undefined;
+    const timer = scheduleWindow?.setTimeout ?? setTimeout;
+    timer(() => {
       this.scheduled = false;
       void this.run(task);
     }, delayMs);

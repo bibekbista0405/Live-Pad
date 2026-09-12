@@ -82,6 +82,10 @@ export class BrowserPlatform implements IPlatformServices {
     }
   }
 
+  public async readWorkspaceFile(_filePath: string): Promise<ReadFileResult | null> {
+    return null;
+  }
+
   public async readFile(): Promise<ReadFileResult | null> {
     Logger.info('Browser Logs', 'readFile called in Browser');
     return new Promise((resolve) => {
@@ -275,6 +279,10 @@ export class BrowserPlatform implements IPlatformServices {
 
   public async setDebuggerBreakpoint(): Promise<{ verified: boolean; id: string }> {
     throw new Error('Native debugging requires the LivePad Desktop Edition.');
+  }
+
+  public async removeDebuggerBreakpoint(_sessionId: string, _breakpointId: string): Promise<boolean> {
+    return false;
   }
 
   public async evaluateDebugger(): Promise<any> {

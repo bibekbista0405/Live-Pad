@@ -70,6 +70,10 @@ class PlatformManager implements IPlatformServices {
     return this.activePlatform.readFile(filePath);
   }
 
+  public async readWorkspaceFile(filePath: string) {
+    return this.activePlatform.readWorkspaceFile(filePath);
+  }
+
   // Filesystem
   public async readDir(dirPath: string, recursive?: boolean): Promise<DirectoryItem[]> {
     return this.activePlatform.readDir(dirPath, recursive);
@@ -213,6 +217,10 @@ class PlatformManager implements IPlatformServices {
 
   public async setDebuggerBreakpoint(sessionId: string, file: string, line: number) {
     return this.activePlatform.setDebuggerBreakpoint(sessionId, file, line);
+  }
+
+  public async removeDebuggerBreakpoint(sessionId: string, breakpointId: string) {
+    return this.activePlatform.removeDebuggerBreakpoint(sessionId, breakpointId);
   }
 
   public async evaluateDebugger(sessionId: string, expression: string) {

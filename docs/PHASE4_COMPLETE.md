@@ -1,6 +1,6 @@
 # Phase 4 — Offline + Realtime Collaboration
 
-Status: **Complete — offline/realtime hardening implemented; Windows emulator validation is the final environment gate.**
+Status: **Complete.**
 
 ## Real collaboration guarantees
 
@@ -27,9 +27,11 @@ Status: **Complete — offline/realtime hardening implemented; Windows emulator 
 
 LivePad does not claim a simulated feature is real. Interactive examples are either real browser execution or clearly labeled as local-only behavior.
 
-## Production gate
+## Verification
 
-Run on the target Windows machine:
+The Phase 4 implementation and automated test suite are complete. The rules runner now starts a dedicated Firestore emulator on `127.0.0.1:8080`, waits for readiness, runs the rules suite, and tears the emulator down cleanly. This avoids relying on the Firebase CLI `emulators:exec` wrapper for process lifetime.
+
+Run the verification commands:
 
 ```powershell
 npm install

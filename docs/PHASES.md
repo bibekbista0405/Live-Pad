@@ -6,7 +6,7 @@
 | Phase 1 — Foundation & Security | 25% | Complete |
 | Phase 2 — Core Data Architecture | 20% | Complete (implementation baseline) |
 | Phase 3 — Application & State Architecture | 15% | Complete |
-| Phase 4 — Offline + Realtime Collaboration | 15% | Complete — final Windows emulator validation gate |
+| Phase 4 — Offline + Realtime Collaboration | 15% | Complete |
 | Phase 5 — Coding Workspace + Electron | 8% | Complete |
 | Phase 6 — AI Platform | 5% | Deferred by product decision — future phase |
 | Phase 7 — UX + Performance | 4% | Planned |

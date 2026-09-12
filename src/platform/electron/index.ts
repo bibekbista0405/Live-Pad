@@ -412,7 +412,7 @@ export class ElectronPlatform implements IPlatformServices {
     if (this.bridge) {
       return await this.bridge.controlDebugger(sessionId, action);
     }
-    return true;
+    return false;
   }
 
   public async setDebuggerBreakpoint(sessionId: string, file: string, line: number): Promise<{ verified: boolean; id: string }> {

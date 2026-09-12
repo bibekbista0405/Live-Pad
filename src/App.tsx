@@ -171,28 +171,6 @@ const ROOM_LABELS = [
   { name: 'Brainstorm', bg: 'bg-[#8b5cf6]/15 text-[#8b5cf6] dark:text-[#a78bfa] border-[#8b5cf6]/35 bg-[#8b5cf6]/10 dark:bg-[#8b5cf6]/20', dotBg: 'bg-[#8b5cf6]' },
 ];
 
-// Motion animation variables for stunning staggered entry and tactile hovering
-const featureContainerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05,
-      delayChildren: 0.1
-    }
-  }
-};
-
-const featureCardVariants = {
-  hidden: { opacity: 0, y: 15, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: { type: 'spring' as const, stiffness: 150, damping: 15 }
-  }
-};
-
 const formatHistoryTime = (timestamp: number) => {
   const diff = Date.now() - timestamp;
   if (diff < 60000) return 'Just now';
@@ -4051,10 +4029,10 @@ console.warn("Verify your variables before deployment!");
 
       {/* Floating Sparkles decorative layers */}
       <div className="absolute inset-0 pointer-events-none z-0 opacity-40 dark:opacity-60 overflow-hidden">
-        <div className="absolute top-[20%] left-[15%] w-2 h-2 rounded-full bg-cyan-200 animate-pulse blur-xs" />
-        <div className="absolute top-[45%] right-[25%] w-3 h-3 rounded-full bg-violet-400/50 animate-bounce" />
-        <div className="absolute bottom-[30%] left-[45%] w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
-        <div className="absolute top-[75%] right-[10%] w-2.5 h-2.5 rounded-full bg-teal-200/60 animate-pulse" />
+        <div className="absolute top-[20%] left-[15%] w-2 h-2 rounded-full bg-cyan-200 blur-xs opacity-70" />
+        <div className="absolute top-[45%] right-[25%] w-3 h-3 rounded-full bg-violet-400/50 opacity-60" />
+        <div className="absolute bottom-[30%] left-[45%] w-1.5 h-1.5 rounded-full bg-emerald-300 opacity-60" />
+        <div className="absolute top-[75%] right-[10%] w-2.5 h-2.5 rounded-full bg-teal-200/60 opacity-60" />
       </div>
 
       {/* Persistent Toasts */}
@@ -4112,12 +4090,8 @@ console.warn("Verify your variables before deployment!");
           />
         ) : !roomCode && !activeLocalNoteId ? (
           /* ================= LANDING PAGE REDESIGN ================= */
-          <motion.main
+          <main
             key="landing"
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             className="livepad-scroll-surface flex-1 w-full h-full overflow-y-auto max-w-6xl mx-auto px-4 py-8 md:py-16 flex flex-col items-center justify-between z-10 no-scrollbar"
           >
             {/* Upper Nav Header */}
@@ -4147,7 +4121,7 @@ console.warn("Verify your variables before deployment!");
                   <Keyboard className="w-4 h-4" /> Keyboard
                 </button>
                 <div className="w-[1.5px] h-4 bg-slate-300 dark:bg-zinc-800 hidden sm:block" />
-                <div className="flex p-0.5 b-1 bg-white/20 dark:bg-black/20 sepia:bg-[#3f2f1e]/10 backdrop-blur-md rounded-full border border-white/40 dark:border-white/5 sepia:border-[#3f2f1e]/10">
+                <div className="flex p-0.5 b-1 bg-white/75 dark:bg-black/30 sepia:bg-[#3f2f1e]/20 rounded-full border border-white/40 dark:border-white/5 sepia:border-[#3f2f1e]/10">
                   <button type="button" onClick={() => setTheme('light')} title="Light Theme" className="p-0 border-0 bg-transparent cursor-pointer">
                     <Sun
                       className={`w-6 h-6 p-1 rounded-full transition-all ${theme === 'light' ? 'bg-white text-orange-500 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
@@ -4232,7 +4206,7 @@ console.warn("Verify your variables before deployment!");
               <div className="w-full max-w-5xl mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
                 
                 {/* COLUMN 1: COLLABORATIVE ROOMS */}
-                <div className="p-6 rounded-2xl bg-white/60 dark:bg-zinc-900/50 backdrop-blur-md border border-slate-200/80 dark:border-zinc-800/80 shadow-xs flex flex-col justify-between gap-5 h-full min-h-[360px]">
+                <div className="p-6 rounded-2xl bg-white/85 dark:bg-zinc-900/80 border border-slate-200/80 dark:border-zinc-800/80 shadow-xs flex flex-col justify-between gap-5 h-full min-h-[360px]">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-zinc-800/60 pb-3">
                       <div className="flex items-center gap-2">
@@ -4291,7 +4265,7 @@ console.warn("Verify your variables before deployment!");
                 </div>
 
                 {/* COLUMN 2: MY LOCAL NOTEPAD & TRASH BIN */}
-                <div className="p-6 rounded-2xl bg-white/60 dark:bg-zinc-900/50 backdrop-blur-md border border-slate-200/80 dark:border-zinc-800/80 shadow-xs flex flex-col justify-between gap-4 h-full min-h-[360px]">
+                <div className="p-6 rounded-2xl bg-white/85 dark:bg-zinc-900/80 border border-slate-200/80 dark:border-zinc-800/80 shadow-xs flex flex-col justify-between gap-4 h-full min-h-[360px]">
                   <div className="flex-1 flex flex-col min-h-0 space-y-3">
                     <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-zinc-800/60 pb-3">
                       <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-800/80 p-0.5 rounded-xl border border-slate-200/60 dark:border-zinc-700/60">
@@ -4557,85 +4531,62 @@ console.warn("Verify your variables before deployment!");
                 Features
               </h3>
 
-              <motion.div 
-                variants={featureContainerVariants}
-                initial="hidden"
-                animate="visible"
-                className="grid grid-cols-2 md:grid-cols-6 gap-4"
-              >
-                <motion.div 
-                  variants={featureCardVariants}
-                  whileHover={{ y: -8, scale: 1.03 }}
-                  className="p-4 rounded-2xl bg-white/45 dark:bg-white/5 border border-white/50 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                <div className="livepad-landing-card p-4 rounded-2xl bg-white/90 dark:bg-zinc-900/80 border border-white/60 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
                 >
                   <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
                     <Users className="w-5 h-5 animate-bounce-slow" />
                   </div>
                   <span className="font-bold text-xs text-slate-800 dark:text-white leading-tight">Real-time collaboration</span>
-                </motion.div>
+                </div>
 
-                <motion.div 
-                  variants={featureCardVariants}
-                  whileHover={{ y: -8, scale: 1.03 }}
-                  className="p-4 rounded-2xl bg-white/45 dark:bg-white/5 border border-white/50 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
+                <div className="livepad-landing-card p-4 rounded-2xl bg-white/90 dark:bg-zinc-900/80 border border-white/60 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
                 >
                   <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center">
-                    <Activity className="w-5 h-5 animate-pulse" />
+                    <Activity className="w-5 h-5 " />
                   </div>
                   <span className="font-bold text-xs text-slate-800 dark:text-white leading-tight">Instant Update</span>
-                </motion.div>
+                </div>
 
-                <motion.div 
-                  variants={featureCardVariants}
-                  whileHover={{ y: -8, scale: 1.03 }}
-                  className="p-4 rounded-2xl bg-white/45 dark:bg-white/5 border border-white/50 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
+                <div className="livepad-landing-card p-4 rounded-2xl bg-white/90 dark:bg-zinc-900/80 border border-white/60 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
                 >
                   <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center">
                     <Shield className="w-5 h-5" />
                   </div>
                   <span className="font-bold text-xs text-slate-800 dark:text-white leading-tight">Secure code</span>
-                </motion.div>
+                </div>
 
-                <motion.div 
-                  variants={featureCardVariants}
-                  whileHover={{ y: -8, scale: 1.03 }}
-                  className="p-4 rounded-2xl bg-white/45 dark:bg-white/5 border border-white/50 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
+                <div className="livepad-landing-card p-4 rounded-2xl bg-white/90 dark:bg-zinc-900/80 border border-white/60 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
                 >
                   <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
                     <Clock className="w-4 h-4" />
                   </div>
                   <span className="font-bold text-xs text-slate-800 dark:text-white leading-tight">Auto-save</span>
-                </motion.div>
+                </div>
 
-                <motion.div 
-                  variants={featureCardVariants}
-                  whileHover={{ y: -8, scale: 1.03 }}
-                  className="p-4 rounded-2xl bg-white/45 dark:bg-white/5 border border-white/50 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
+                <div className="livepad-landing-card p-4 rounded-2xl bg-white/90 dark:bg-zinc-900/80 border border-white/60 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
                 >
                   <div className="w-10 h-10 rounded-xl bg-yellow-500/10 text-yellow-500 flex items-center justify-center">
                     <Laptop className="w-5 h-5" />
                   </div>
                   <span className="font-bold text-xs text-slate-800 dark:text-white leading-tight">Cross-device</span>
-                </motion.div>
+                </div>
 
-                <motion.div 
-                  variants={featureCardVariants}
-                  whileHover={{ y: -8, scale: 1.03 }}
-                  className="p-4 rounded-2xl bg-white/45 dark:bg-white/5 border border-white/50 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
+                <div className="livepad-landing-card p-4 rounded-2xl bg-white/90 dark:bg-zinc-900/80 border border-white/60 dark:border-white/5 shadow-xs flex flex-col items-center text-center space-y-2 transition-all duration-200 hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-[0_20px_25px_-5px_rgba(14,165,233,0.1)]"
                 >
                   <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
                     <Zap className="w-5 h-5" />
                   </div>
                   <span className="font-bold text-xs text-slate-800 dark:text-white leading-tight">Fast performance</span>
-                </motion.div>
-              </motion.div>
+                </div>
+              </div>
             </div>
 
             {/* Bottom bar credits */}
             <footer className="w-full mt-12 pt-6 border-t border-slate-300/10 dark:border-zinc-800/20 text-center text-[11px] font-semibold text-slate-400 dark:text-zinc-500">
               © {new Date().getFullYear()} LivePad. Crafted elegantly by <span className="text-[#0ea5e9] dark:text-cyan-400 font-bold hover:underline transition-all">bibek bista</span>. Dynamic collaborative writing tool built elegantly.
             </footer>
-          </motion.main>
+          </main>
         ) : (
           /* ================= WORKSPACE REDESIGN (GLASS TABLET FRAME style) ================= */
           <motion.div

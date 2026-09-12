@@ -1,210 +1,86 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ChevronRight, Play, VolumeX } from 'lucide-react';
+import { motion } from 'motion/react';
+import { ChevronRight, Play } from 'lucide-react';
 
 interface IntroScreenProps {
   onComplete: () => void;
 }
 
+/**
+ * Lightweight product intro.  The previous fallback rendered a static brand
+ * image after a video-load timeout, which made the boot experience feel like
+ * an image splash and also added an unnecessary media-loading path.  This
+ * version is CSS-driven so the reveal stays animated without a per-frame React
+ * animation loop or a large video download.
+ */
 export default function IntroScreen({ onComplete }: IntroScreenProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [skipHovered, setSkipHovered] = useState(false);
-  const [useVideo, setUseVideo] = useState(true);
-  const [isLoadingVideo, setIsLoadingVideo] = useState(true);
-  const [fallbackPhase, setFallbackPhase] = useState<'wave' | 'draw' | 'complete'>('wave');
-
-  // Fallback scheduling if video fails or is delayed
-  useEffect(() => {
-    // If video hasn't loaded in 1000ms, fall back to the official supplied LivePad brand artwork
-    const timeout = setTimeout(() => {
-      if (isLoadingVideo) {
-        setUseVideo(false);
-      }
-    }, 1000);
-
-    return () => clearTimeout(timeout);
-  }, [isLoadingVideo]);
-
-  // Keep onComplete reference stable to prevent re-triggering the timer on parent re-renders
+  const [isClosing, setIsClosing] = useState(false);
   const onCompleteRef = useRef(onComplete);
+
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
 
-  // Overall auto-complete timer set to exactly 5 seconds
   useEffect(() => {
-    const timer = setTimeout(() => {
-      onCompleteRef.current();
-    }, 5000);
-
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => onCompleteRef.current(), 4200);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  // Handle fallback stages
-  useEffect(() => {
-    if (!useVideo) {
-      // Step 1: Play waving ribbons for 1.4s
-      const t1 = setTimeout(() => {
-        setFallbackPhase('draw');
-      }, 1400);
-
-      return () => {
-        clearTimeout(t1);
-      };
-    }
-  }, [useVideo]);
-
-  const handleVideoEnded = () => {
-    // End presentation immediately when the video finishes
-    onComplete();
-  };
-
-  const handleVideoError = () => {
-    setUseVideo(false);
-  };
-
-  const handleCanPlay = () => {
-    setIsLoadingVideo(false);
-    if (videoRef.current) {
-      videoRef.current.play().catch(() => {
-        // If browser policies block autoplay, we switch to our interactive fallback
-        setUseVideo(false);
-      });
-    }
+  const complete = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    window.setTimeout(() => onCompleteRef.current(), 420);
   };
 
   return (
     <motion.div
       initial={{ opacity: 1 }}
-      animate={{ opacity: 1 }}
-      exit={{ 
-        opacity: 0, 
-        scale: 1.05,
-        filter: 'blur(10px)',
-        transition: { duration: 0.5, ease: [0.43, 0.13, 0.23, 0.96] } 
-      }}
-      className="fixed inset-0 mountaineer z-[150] flex flex-col items-center justify-center bg-white text-slate-800 select-none overflow-hidden"
+      animate={{ opacity: isClosing ? 0 : 1 }}
+      transition={{ duration: 0.42, ease: 'easeOut' }}
+      className="livepad-intro fixed inset-0 z-[150] flex items-center justify-center overflow-hidden bg-white text-slate-800 dark:bg-[#090b10] dark:text-white select-none"
     >
-      <AnimatePresence mode="wait">
-        {useVideo ? (
-          /* =========================================================================
-             1. NATIVE VIDEO PRESENTER (PLAYS 'intro animations.mp4')
-             ========================================================================= */
-          <motion.div
-            key="video-track"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="relative w-full h-full flex flex-col items-center justify-center px-4"
-          >
-            <div className="relative w-full h-full max-w-4xl max-h-[80vh] flex items-center justify-center z-10">
-              {isLoadingVideo && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                  <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin text-cyan-600" />
-                  <span className="text-[10px] font-mono tracking-[0.25em] text-slate-400 uppercase animate-pulse">
-                    Synchronizing Workspace...
-                  </span>
-                </div>
-              )}
-              <video
-                ref={videoRef}
-                src="/intro animations.mp4"
-                autoPlay
-                muted
-                playsInline
-                onEnded={handleVideoEnded}
-                onError={handleVideoError}
-                onCanPlay={handleCanPlay}
-                className="w-full h-full object-contain filter drop-shadow-xl"
-              />
-            </div>
+      <div className="livepad-intro-grid absolute inset-0" aria-hidden="true" />
+      <div className="livepad-intro-glow absolute inset-0" aria-hidden="true" />
 
-            {/* Mute indicator label */}
-            {!isLoadingVideo && (
-              <div className="absolute bottom-24 flex items-center gap-1.5 text-[9px] font-mono text-slate-400 tracking-widest uppercase z-20">
-                <VolumeX className="w-3.5 h-3.5 text-slate-400" />
-                <span>Presentation Default Muted</span>
-              </div>
-            )}
-          </motion.div>
-        ) : (
-          /* =========================================================================
-             2. OFFICIAL LIVEPAD BRAND FALLBACK
-             ========================================================================= */
-          <motion.div
-            key="fallback-track"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 flex flex-col items-center justify-center bg-white"
-          >
-            {/* Waving Ribbon Wave Sheets (Simulating the 3D ribbon sweep of the video) */}
-            {fallbackPhase === 'wave' && (
-              <div className="absolute inset-0 z-50 pointer-events-none">
-                <motion.div
-                  initial={{ x: '-100%' }}
-                  animate={{ x: '100%' }}
-                  transition={{ duration: 1.4, ease: [0.76, 0, 0.24, 1] }}
-                  className="absolute inset-0 bg-blue-600 opacity-90"
-                />
-                <motion.div
-                  initial={{ x: '-100%' }}
-                  animate={{ x: '100%' }}
-                  transition={{ duration: 1.4, delay: 0.1, ease: [0.76, 0, 0.24, 1] }}
-                  className="absolute inset-0 bg-cyan-400 opacity-80"
-                />
-                <motion.div
-                  initial={{ x: '-100%' }}
-                  animate={{ x: '100%' }}
-                  transition={{ duration: 1.4, delay: 0.2, ease: [0.76, 0, 0.24, 1] }}
-                  className="absolute inset-0 bg-slate-50"
-                />
-              </div>
-            )}
+      {/* Animated ribbon sweep — CSS only, no video/media download. */}
+      <div className="livepad-intro-ribbon livepad-intro-ribbon-a" aria-hidden="true" />
+      <div className="livepad-intro-ribbon livepad-intro-ribbon-b" aria-hidden="true" />
+      <div className="livepad-intro-ribbon livepad-intro-ribbon-c" aria-hidden="true" />
 
-            {/* Ambient Background Light Circle */}
-            <div className="absolute w-[500px] h-[500px] rounded-full bg-gradient-to-tr from-cyan-100/30 via-white to-blue-100/20 blur-[100px] pointer-events-none" />
+      <div className="relative z-10 flex flex-col items-center text-center px-6">
+        <div className="livepad-intro-mark relative flex items-center justify-center">
+          <div className="livepad-intro-ring livepad-intro-ring-one" aria-hidden="true" />
+          <div className="livepad-intro-ring livepad-intro-ring-two" aria-hidden="true" />
+          <div className="livepad-intro-ring livepad-intro-ring-three" aria-hidden="true" />
+          <div className="livepad-intro-spark livepad-intro-spark-one" aria-hidden="true" />
+          <div className="livepad-intro-spark livepad-intro-spark-two" aria-hidden="true" />
+          <img
+            src="/brand/livepad-icon-512.png"
+            alt="LivePad"
+            draggable={false}
+            className="livepad-intro-icon"
+          />
+        </div>
 
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.1, duration: 0.8, ease: 'easeOut' }}
-              className="relative z-10 flex flex-col items-center justify-center text-center px-6"
-            >
-              {/* Official LivePad brand artwork supplied by the product owner */}
-              <motion.img
-                src="/brand/livepad-lockup.png"
-                alt="LivePad — Real-time Notes, Seamlessly"
-                draggable={false}
-                initial={{ scale: 0.94, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.15, duration: 0.8, ease: 'easeOut' }}
-                className="relative z-10 w-[min(88vw,520px)] h-auto object-contain"
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <div className="livepad-intro-wordmark" aria-label="LivePad">
+          <span>Live</span><strong>Pad</strong>
+        </div>
+        <p className="livepad-intro-tagline">Real-Time Notes, Seamlessly</p>
+        <div className="livepad-intro-loader" aria-hidden="true">
+          <span /><span /><span />
+        </div>
+      </div>
 
-      {/* FLOATING GLASS BYPASS BUTTON */}
-      <motion.button
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5, duration: 0.5 }}
-        onMouseEnter={() => setSkipHovered(true)}
-        onMouseLeave={() => setSkipHovered(false)}
-        onClick={onComplete}
-        className="absolute bottom-10 cursor-pointer py-2.5 px-6 rounded-full border border-slate-200 bg-white/70 backdrop-blur-md text-xs font-semibold text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-50 transition-all flex items-center gap-2 z-30 shadow-sm group overflow-hidden"
+      <button
+        type="button"
+        onClick={complete}
+        className="absolute bottom-9 z-20 inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-white/80 px-5 py-2.5 text-xs font-semibold text-slate-600 shadow-sm backdrop-blur-sm transition hover:border-slate-300 hover:bg-white hover:text-slate-900 dark:border-white/10 dark:bg-zinc-900/75 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        aria-label="Skip LivePad introduction"
       >
-        <Play className="w-3 h-3 text-cyan-600 fill-cyan-600" />
+        <Play className="w-3 h-3 fill-cyan-600 text-cyan-600" />
         <span>Skip Introduction</span>
-        <motion.div
-          animate={skipHovered ? { x: 3 } : { x: 0 }}
-          transition={{ type: 'spring', stiffness: 350, damping: 15 }}
-        >
-          <ChevronRight className="w-3.5 h-3.5 text-cyan-600" />
-        </motion.div>
-      </motion.button>
+        <ChevronRight className="w-3.5 h-3.5 text-cyan-600" />
+      </button>
     </motion.div>
   );
 }

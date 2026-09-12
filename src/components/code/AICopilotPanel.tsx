@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { ProjectFile } from '../../types/code';
 import { extensionRegistry } from '../../services/extensionRegistry';
+import { ensureAuth } from '../../lib/firebase';
 
 interface ChatMessage {
   id: string;
@@ -83,7 +84,7 @@ export function AICopilotPanel({
     setIsGenerating(true);
 
     try {
-      const response = await simulateAICopilotResponse(promptText, activeFile, allFiles);
+      const response = await requestAICopilot(promptText, activeFile, allFiles);
       setMessages((prev) => [...prev, response]);
     } catch (err: any) {
       setMessages((prev) => [
@@ -358,118 +359,30 @@ export function AICopilotPanel({
   );
 }
 
-// Helper AI simulator with workspace context awareness
-async function simulateAICopilotResponse(
-  prompt: string,
-  activeFile: ProjectFile | null,
-  allFiles: ProjectFile[] = []
-): Promise<ChatMessage> {
-  await new Promise((res) => setTimeout(res, 600));
+// Real AI client: obtains the current Firebase ID token and calls the protected server Gemini endpoint.
+async function requestAICopilot(prompt: string, activeFile: ProjectFile | null, allFiles: ProjectFile[]): Promise<ChatMessage> {
+  const user = await ensureAuth();
+  if (!user) throw new Error('Sign in to LivePad to use AI Copilot.');
+  const token = await user.getIdToken();
+  const response = await fetch('/api/ai/copilot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      prompt,
+      activeFile: activeFile ? { name: activeFile.name, language: activeFile.language, content: activeFile.content } : null,
+      files: allFiles.slice(0, 30).map((file) => ({ name: file.name, language: file.language, path: file.path, content: file.content }))
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `AI request failed (${response.status})`);
 
-  const p = prompt.toLowerCase();
-  const fileName = activeFile?.name || 'project file';
-  const code = activeFile?.content || '';
-  const contextSummary = allFiles.length > 0 
-    ? `Analyzed ${allFiles.length} workspace file(s) for contextual integrity.`
-    : `Analyzed active context buffer.`;
-
-  if (p.includes('explain')) {
-    return {
-      id: `ai-${Date.now()}`,
-      sender: 'ai',
-      text: `### 🔍 Architectural Code Breakdown: **${fileName}**\n\n${contextSummary}\n\n1. **Core Purpose**: Encapsulates component render tree & state reactive bindings.\n2. **Logic Flow**: Implements event handlers with defensive error guards and fast state propagation.\n3. **Dependencies**: Integrated with workspace module system and layout trees.\n4. **Performance**: Memory footprint is minimal with zero unnecessary re-render loops.`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-  }
-
-  if (p.includes('generate')) {
-    const generated = `// Auto-Generated Code Snippet by LivePad AI Copilot\n// ${contextSummary}\n\nexport function GeneratedFeature() {\n  return (\n    <div className="p-4 bg-slate-900 text-cyan-300 rounded-xl border border-slate-800 font-mono">\n      <h3 className="text-sm font-bold">✨ AI Generated Feature Block</h3>\n      <p className="text-xs text-slate-400 mt-1">Ready to integrate into ${fileName}</p>\n    </div>\n  );\n}\n`;
-
-    return {
-      id: `ai-${Date.now()}`,
-      sender: 'ai',
-      text: `Generated code tailored to your project structure:\n\n*${contextSummary}*`,
-      codeSnippet: generated,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-  }
-
-  if (p.includes('refactor')) {
-    const refactoredCode = code
-      ? `// Refactored by LivePad AI Copilot\n${code}\n\n// Added defensive guards & extracted clean modular sub-helpers`
-      : `// Clean Modular Component Template\nexport function Component() {\n  return (\n    <div className="p-4 bg-slate-900 text-white rounded-xl shadow-lg">\n      <h2 className="text-lg font-bold">LivePad Refactored Component</h2>\n    </div>\n  );\n}`;
-
-    return {
-      id: `ai-${Date.now()}`,
-      sender: 'ai',
-      text: `Refactored **${fileName}** for enhanced readability, clean architecture, and type safety:\n\n*${contextSummary}*`,
-      codeSnippet: refactoredCode,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-  }
-
-  if (p.includes('bug') || p.includes('audit')) {
-    const fixedCode = code
-      ? `// Bug-Fixed & Audited Version of ${fileName}\n// Fixed potential null reference and added try-catch error boundary\n${code.replace(/const /g, '// verified: const ')}`
-      : `// Defensive Guarded Component\nexport function SafeComponent() {\n  return <div>Audit Passed</div>;\n}`;
-
-    return {
-      id: `ai-${Date.now()}`,
-      sender: 'ai',
-      text: `**Code Audit & Bug Fix Results for ${fileName}**:\n\n✓ Resolved potential null pointer access\n✓ Added boundary checks for async promises\n✓ Memory leak risk: Zero detected\n\n*${contextSummary}*`,
-      codeSnippet: fixedCode,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-  }
-
-  if (p.includes('test')) {
-    const testCode = `// Comprehensive Vitest Suite for ${fileName}\nimport { describe, it, expect } from 'vitest';\n\ndescribe('${fileName} Test Suite', () => {\n  it('renders correctly and initializes state', () => {\n    expect(true).toBe(true);\n  });\n\n  it('handles edge cases gracefully without throwing exceptions', () => {\n    expect(true).toBe(true);\n  });\n});`;
-
-    return {
-      id: `ai-${Date.now()}`,
-      sender: 'ai',
-      text: `Here is a complete, production-ready unit test suite for **${fileName}**:\n\n*${contextSummary}*`,
-      codeSnippet: testCode,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-  }
-
-  if (p.includes('optimize')) {
-    const optimized = code
-      ? `// Optimized Version of ${fileName}\n// Applied React.memo / memoization & reduced algorithmic complexity\n${code}`
-      : `// High-Performance Component\nexport function OptimizedComponent() {\n  return <div>Optimized 60fps execution</div>;\n}`;
-
-    return {
-      id: `ai-${Date.now()}`,
-      sender: 'ai',
-      text: `⚡ **Performance Optimization Report for ${fileName}**:\n\n- Reduced re-render operations by ~40%\n- Memoized heavy calculations and callbacks\n- Optimized DOM reflows\n\n*${contextSummary}*`,
-      codeSnippet: optimized,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-  }
-
-  if (p.includes('doc') || p.includes('jsdoc')) {
-    const docCode = code
-      ? `/**\n * @module ${fileName}\n * @description High-performance module in LivePad AI workspace.\n */\n\n${code}`
-      : `/**\n * @function ExampleFunction\n * @param {string} name - The item name\n * @returns {boolean}\n */\nexport function ExampleFunction(name: string): boolean {\n  return Boolean(name);\n}`;
-
-    return {
-      id: `ai-${Date.now()}`,
-      sender: 'ai',
-      text: `Generated comprehensive JSDoc & TypeScript documentation for **${fileName}**:\n\n*${contextSummary}*`,
-      codeSnippet: docCode,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-  }
-
-  // Default response
+  const rawText = String(payload.text || '');
+  const codeMatch = rawText.match(/```(?:[a-zA-Z0-9_+-]+)?\n([\s\S]*?)```/);
   return {
     id: `ai-${Date.now()}`,
     sender: 'ai',
-    text: `I analyzed **${fileName}** across your workspace context:\n\n*${contextSummary}*\n\nHere is the suggested implementation:`,
-    codeSnippet: code ? `// AI Suggested Update\n${code}` : `console.log("Hello from LivePad AI Copilot!");`,
+    text: codeMatch ? rawText.replace(codeMatch[0], '').trim() : rawText,
+    codeSnippet: codeMatch?.[1]?.trim(),
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   };
 }
-
-export default AICopilotPanel;

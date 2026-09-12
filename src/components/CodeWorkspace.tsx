@@ -239,17 +239,26 @@ const DEFAULT_FILES: ProjectFile[] = [
       </svg>
     </div>
     <h1 class="text-2xl font-black text-white tracking-tight">LivePad Interactive Sandbox</h1>
-    <p class="text-slate-400 text-sm">Realtime collaborative coding with VS Code Project Explorer.</p>
-    <button onclick="showAlert()" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 font-bold text-white rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer">
-      Run Interactive Demo
-    </button>
+    <p class="text-slate-400 text-sm">A real browser preview: edit this file, run it, and interact with the result.</p>
+    <div class="rounded-2xl bg-slate-950 border border-slate-800 p-4 space-y-3">
+      <div class="text-xs text-slate-400">Local counter</div>
+      <div id="count" class="text-4xl font-black text-white">0</div>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="increment" class="py-2 bg-cyan-600 hover:bg-cyan-500 font-bold text-white rounded-xl">Increment</button>
+        <button id="reset" class="py-2 bg-slate-800 hover:bg-slate-700 font-bold text-white rounded-xl">Reset</button>
+      </div>
+      <div id="status" class="text-[11px] text-emerald-400">Ready</div>
+    </div>
   </div>
 
   <script>
-    function showAlert() {
-      console.log('✨ Button clicked inside LivePad sandbox!');
-      alert('Hello from LivePad Code Workspace!');
-    }
+    let count = Number(localStorage.getItem('livepad-demo-count') || 0);
+    const countEl = document.getElementById('count');
+    const statusEl = document.getElementById('status');
+    const render = () => { countEl.textContent = String(count); localStorage.setItem('livepad-demo-count', String(count)); statusEl.textContent = 'Saved locally'; };
+    document.getElementById('increment').addEventListener('click', () => { count += 1; render(); });
+    document.getElementById('reset').addEventListener('click', () => { count = 0; render(); });
+    render();
   </script>
 </body>
 </html>`,

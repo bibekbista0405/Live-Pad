@@ -22,6 +22,8 @@ import { WorkspaceLibraryService } from '../services/workspaceLibraryService';
 import { getRecentWorkspaces } from '../utils/recentWorkspaces';
 import { useWorkspacePresence } from './useWorkspacePresence';
 import { useWorkspaceMembership } from './useWorkspaceMembership';
+import { SyncCoordinator } from '../sync/syncCoordinator';
+import { offlineOutbox } from '../sync/offlineOutbox';
 
 const PASTEL_COLORS = [
   '#ef4444', // Red
@@ -83,6 +85,7 @@ export function useLiveRoom(roomId: string | null, userName: string) {
     })()
   );
   const lastTxIdRef = useRef<string>('');
+  const syncCoordinatorRef = useRef(new SyncCoordinator({ baseDelayMs: 400, maxDelayMs: 8000, maxRetries: 4 }));
 
   const channelRef = useRef<BroadcastChannel | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -116,6 +119,60 @@ export function useLiveRoom(roomId: string | null, userName: string) {
       if (cursorFrameRef.current !== null) cancelAnimationFrame(cursorFrameRef.current);
     };
   }, [roomId]);
+
+  // Keep UI connectivity state aligned with the browser network signal immediately.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleOnline = () => {
+      setIsConnected(true);
+      if (offlineOutbox.count() > 0) setSyncStatus('saving');
+    };
+    const handleOffline = () => {
+      setIsConnected(false);
+      setSyncStatus('offline');
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    if (!navigator.onLine) handleOffline();
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Resume durable offline writes when connectivity returns.
+  useEffect(() => {
+    if (!roomId || !uid || !isFirebaseConfigured || typeof window === 'undefined') return;
+
+    const flushOutbox = () => {
+      const pending = offlineOutbox.list().filter((item) => item.roomId === roomId);
+      if (!pending.length || isFirestoreQuotaExhausted() || !db) return;
+      const latest = pending[pending.length - 1];
+      void syncCoordinatorRef.current.run({
+        id: `outbox:${latest.txId}`,
+        run: async () => {
+          await updateDoc(doc(db, 'rooms', latest.roomId), {
+            content: latest.content,
+            updatedAt: serverTimestamp(),
+            lastClientId: latest.clientId,
+            lastTxId: latest.txId,
+          });
+          offlineOutbox.remove(latest.roomId, latest.txId);
+          setSyncStatus('synced');
+          setIsConnected(true);
+          setUseFirebase(true);
+        },
+      }).catch(() => {
+        setSyncStatus('offline');
+      });
+    };
+
+    window.addEventListener('online', flushOutbox);
+    if (navigator.onLine) flushOutbox();
+    return () => {
+      window.removeEventListener('online', flushOutbox);
+    };
+  }, [roomId, uid]);
 
   // Sync user name changes to Firestore room path instantly
   useEffect(() => {
@@ -152,7 +209,7 @@ export function useLiveRoom(roomId: string | null, userName: string) {
     setUserColor(savedColor);
   }, []);
 
-  // Initialize Authentication (Firebase or Mock)
+  // Initialize authentication (Firebase or local offline identity)
   useEffect(() => {
     if (useFirebase && auth) {
       const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -193,7 +250,7 @@ export function useLiveRoom(roomId: string | null, userName: string) {
       });
       return () => unsubscribe();
     } else {
-      // Mock Fallback
+      // Local offline identity fallback
       setUid(getLocalUid());
     }
   }, [useFirebase]);
@@ -701,7 +758,7 @@ export function useLiveRoom(roomId: string | null, userName: string) {
       });
 
       // Broadcast heartbeat pulse to keep presence alive in browser tabs
-      const mockPulse = setInterval(() => {
+      const heartbeatTimer = setInterval(() => {
         const userPresenceStateObj = {
           uid,
           name: userNameRef.current || 'Anonymous Writer',
@@ -745,7 +802,7 @@ export function useLiveRoom(roomId: string | null, userName: string) {
 
       return () => {
         channel.close();
-        clearInterval(mockPulse);
+        clearInterval(heartbeatTimer);
       };
     }
   }, [roomId, uid, useFirebase, refreshKey]);
@@ -768,13 +825,20 @@ export function useLiveRoom(roomId: string | null, userName: string) {
     if (useFirebase && db && !isFirestoreQuotaExhausted()) {
       try {
         const roomDocRef = doc(db, 'rooms', roomId);
-        await updateDoc(roomDocRef, {
-          content: text,
-          updatedAt: serverTimestamp(),
-          lastClientId: clientIdRef.current,
-          lastTxId: txId,
+        await syncCoordinatorRef.current.run({
+          id: txId,
+          run: async () => {
+            await updateDoc(roomDocRef, {
+              content: text,
+              updatedAt: serverTimestamp(),
+              lastClientId: clientIdRef.current,
+              lastTxId: txId,
+            });
+          },
         });
+        offlineOutbox.remove(roomId, txId);
         setSyncStatus('synced');
+        setIsConnected(true);
       } catch (err) {
         const errStr = String(err);
         if (errStr.includes('resource-exhausted') || errStr.includes('Quota')) {
@@ -789,8 +853,16 @@ export function useLiveRoom(roomId: string | null, userName: string) {
           }
           setSyncStatus('synced');
         } else {
-          console.error("Save error:", err);
-          setSyncStatus('error');
+          console.warn('[LivePad Sync] Remote write failed; preserving edit in durable outbox.', err);
+          offlineOutbox.enqueue({
+            roomId,
+            content: text,
+            txId,
+            clientId: clientIdRef.current,
+            updatedAt: Date.now(),
+          });
+          setIsConnected(false);
+          setSyncStatus('offline');
         }
       }
     } else {

@@ -1,43 +1,72 @@
 import { GitHubRepository, GitHubPullRequest, GitHubIssue, GitHubActionRun } from '../types/phase4';
 import { Platform } from '../platform';
 
+const API = 'https://api.github.com';
+
+interface GitHubUser { login: string; avatar_url: string; name: string | null; }
+
 export class GitHubService {
   private static instance: GitHubService;
   private token: string | null = null;
   private user: { login: string; avatarUrl: string; name: string } | null = null;
+  private repositoriesCache: { value: GitHubRepository[]; expiresAt: number } | null = null;
 
   public static getInstance(): GitHubService {
-    if (!GitHubService.instance) {
-      GitHubService.instance = new GitHubService();
-    }
+    if (!GitHubService.instance) GitHubService.instance = new GitHubService();
     return GitHubService.instance;
   }
 
   public async init() {
     const savedToken = await Platform.getNativeStorage('livepad_github_token');
-    if (savedToken && typeof savedToken === 'string') {
-      this.token = savedToken;
-      this.user = {
-        login: 'octocat',
-        avatarUrl: 'https://avatars.githubusercontent.com/u/583231?v=4',
-        name: 'The Octocat',
-      };
+    if (typeof savedToken !== 'string' || !savedToken.trim()) return;
+    this.token = savedToken;
+    try {
+      await this.refreshUser();
+    } catch {
+      this.token = null;
+      this.user = null;
+      await Platform.setNativeStorage('livepad_github_token', null);
     }
   }
 
-  public isAuthenticated(): boolean {
-    return !!this.token || !!this.user;
+  public isAuthenticated(): boolean { return !!this.token && !!this.user; }
+
+  private async request<T>(endpoint: string, init: RequestInit = {}): Promise<T> {
+    if (!this.token) throw new Error('Connect a GitHub account first.');
+    const response = await fetch(`${API}${endpoint}`, {
+      ...init,
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${this.token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(init.headers || {}),
+      },
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`GitHub API ${response.status}: ${body || response.statusText}`);
+    }
+    return response.json() as Promise<T>;
   }
 
-  public async loginWithGitHub(token?: string): Promise<boolean> {
-    this.token = token || 'gho_mock_token_livepad_dev';
-    this.user = {
-      login: 'developer-user',
-      avatarUrl: 'https://avatars.githubusercontent.com/u/9919?v=4',
-      name: 'Senior Developer',
-    };
-    await Platform.setNativeStorage('livepad_github_token', this.token);
-    return true;
+  private async refreshUser() {
+    const user = await this.request<GitHubUser>('/user');
+    this.user = { login: user.login, avatarUrl: user.avatar_url, name: user.name || user.login };
+  }
+
+  /** Accepts a GitHub fine-grained/classic PAT supplied by the user; no fake credentials are ever generated. */
+  public async loginWithGitHub(token: string): Promise<boolean> {
+    if (!token?.trim()) throw new Error('A GitHub personal access token is required.');
+    this.token = token.trim();
+    try {
+      await this.refreshUser();
+      await Platform.setNativeStorage('livepad_github_token', this.token);
+      return true;
+    } catch (error) {
+      this.token = null;
+      this.user = null;
+      throw error;
+    }
   }
 
   public async logout() {
@@ -46,161 +75,66 @@ export class GitHubService {
     await Platform.setNativeStorage('livepad_github_token', null);
   }
 
-  public getUser() {
-    return this.user;
-  }
+  public getUser() { return this.user; }
 
-  // Repositories
   public async getRepositories(): Promise<GitHubRepository[]> {
-    return [
-      {
-        id: 101,
-        name: 'livepad-ide',
-        fullName: 'livepad/livepad-ide',
-        owner: 'livepad',
-        avatarUrl: 'https://avatars.githubusercontent.com/u/9919?v=4',
-        isPrivate: false,
-        description: 'Next-Generation Full-Stack IDE for Web, Desktop & Mobile',
-        starsCount: 1420,
-        forksCount: 230,
-        openIssuesCount: 12,
-        defaultBranch: 'main',
-        cloneUrl: 'https://github.com/livepad/livepad-ide.git',
-        updatedAt: '2 hours ago',
-      },
-      {
-        id: 102,
-        name: 'ai-code-agents',
-        fullName: 'livepad/ai-code-agents',
-        owner: 'livepad',
-        avatarUrl: 'https://avatars.githubusercontent.com/u/9919?v=4',
-        isPrivate: true,
-        description: 'Autonomous multi-file code editing & refactoring agent engine',
-        starsCount: 890,
-        forksCount: 45,
-        openIssuesCount: 4,
-        defaultBranch: 'main',
-        cloneUrl: 'https://github.com/livepad/ai-code-agents.git',
-        updatedAt: 'Yesterday',
-      },
-      {
-        id: 103,
-        name: 'react-monaco-tree',
-        fullName: 'livepad/react-monaco-tree',
-        owner: 'livepad',
-        avatarUrl: 'https://avatars.githubusercontent.com/u/9919?v=4',
-        isPrivate: false,
-        description: 'High-performance virtualized file tree component for Monaco editor',
-        starsCount: 340,
-        forksCount: 18,
-        openIssuesCount: 2,
-        defaultBranch: 'main',
-        cloneUrl: 'https://github.com/livepad/react-monaco-tree.git',
-        updatedAt: '3 days ago',
-      },
-    ];
+    if (this.repositoriesCache && this.repositoriesCache.expiresAt > Date.now()) return this.repositoriesCache.value;
+    const repos = await this.request<Array<Record<string, any>>>('/user/repos?sort=updated&per_page=50');
+    const mapped = repos.map((repo) => ({
+      id: repo.id, name: repo.name, fullName: repo.full_name, owner: repo.owner?.login || '',
+      avatarUrl: repo.owner?.avatar_url || '', isPrivate: !!repo.private, description: repo.description || '',
+      starsCount: repo.stargazers_count || 0, forksCount: repo.forks_count || 0, openIssuesCount: repo.open_issues_count || 0,
+      defaultBranch: repo.default_branch || 'main', cloneUrl: repo.clone_url || repo.html_url, updatedAt: repo.updated_at || '',
+    }));
+    this.repositoriesCache = { value: mapped, expiresAt: Date.now() + 30_000 };
+    return mapped;
   }
 
-  // Pull Requests
   public async getPullRequests(): Promise<GitHubPullRequest[]> {
-    return [
-      {
-        id: 201,
-        number: 42,
-        title: 'feat(core): Phase 4 Cloud Workspaces & GitHub Sync Engine',
-        author: 'alex-dev',
-        authorAvatar: 'https://avatars.githubusercontent.com/u/1021?v=4',
-        status: 'open',
-        createdAt: '3 hours ago',
-        headBranch: 'feature/phase-4-cloud',
-        baseBranch: 'main',
-        additions: 840,
-        deletions: 120,
-        changedFiles: 18,
-        reviewers: ['sarah-lead', 'chen-security'],
-      },
-      {
-        id: 202,
-        number: 41,
-        title: 'fix(terminal): Node pty buffer overflow on heavy log streaming',
-        author: 'sarah-lead',
-        authorAvatar: 'https://avatars.githubusercontent.com/u/1022?v=4',
-        status: 'merged',
-        createdAt: 'Yesterday',
-        headBranch: 'fix/terminal-pty-buf',
-        baseBranch: 'main',
-        additions: 45,
-        deletions: 12,
-        changedFiles: 3,
-        reviewers: ['alex-dev'],
-      },
-    ];
+    const repos = await this.getRepositories();
+    const prs: GitHubPullRequest[] = [];
+    for (const repo of repos.slice(0, 5)) {
+      const items = await this.request<Array<Record<string, any>>>(`/repos/${encodeURIComponent(repo.fullName)}/pulls?state=all&per_page=10`);
+      for (const pr of items) {
+        const detail = await this.request<Record<string, any>>(`/repos/${encodeURIComponent(repo.fullName)}/pulls/${pr.number}`);
+        prs.push({
+          id: pr.id, number: pr.number, title: pr.title, author: pr.user?.login || 'unknown', authorAvatar: pr.user?.avatar_url || '',
+          status: pr.merged_at ? 'merged' : pr.state === 'open' ? 'open' : 'closed', createdAt: pr.created_at || '',
+          headBranch: pr.head?.ref || '', baseBranch: pr.base?.ref || '', additions: detail.additions || 0, deletions: detail.deletions || 0,
+          changedFiles: detail.changed_files || 0, reviewers: (detail.requested_reviewers || []).map((r: any) => r.login),
+        });
+      }
+    }
+    return prs;
   }
 
-  // Issues
   public async getIssues(): Promise<GitHubIssue[]> {
-    return [
-      {
-        id: 301,
-        number: 89,
-        title: 'Add support for custom Monaco language servers via LSP protocol',
-        author: 'community-member',
-        status: 'open',
-        labels: [
-          { name: 'enhancement', color: '#a2eeef' },
-          { name: 'help wanted', color: '#008672' },
-        ],
-        createdAt: '2 days ago',
-        commentsCount: 5,
-        assignee: 'alex-dev',
-      },
-      {
-        id: 302,
-        number: 88,
-        title: 'Dark theme high-contrast mode for accessible code inspection',
-        author: 'sarah-lead',
-        status: 'open',
-        labels: [{ name: 'accessibility', color: '#1d76db' }],
-        createdAt: '4 days ago',
-        commentsCount: 2,
-      },
-    ];
+    const repos = await this.getRepositories();
+    const issues: GitHubIssue[] = [];
+    for (const repo of repos.slice(0, 5)) {
+      const items = await this.request<Array<Record<string, any>>>(`/repos/${encodeURIComponent(repo.fullName)}/issues?state=all&per_page=20`);
+      issues.push(...items.filter((issue) => !issue.pull_request).map((issue) => ({
+        id: issue.id, number: issue.number, title: issue.title, author: issue.user?.login || 'unknown',
+        status: issue.state === 'open' ? 'open' : 'closed', labels: (issue.labels || []).map((label: any) => ({ name: label.name, color: `#${label.color || '888888'}` })),
+        createdAt: issue.created_at || '', commentsCount: issue.comments || 0, assignee: issue.assignee?.login,
+      })));
+    }
+    return issues;
   }
 
-  // Actions Workflow Runs
   public async getActionRuns(): Promise<GitHubActionRun[]> {
-    return [
-      {
-        id: 401,
-        name: 'CI Build & Cross-Platform Tests',
-        workflow: 'ci.yml',
-        branch: 'main',
-        status: 'completed',
-        conclusion: 'success',
-        createdAt: '10 mins ago',
-        durationMs: 42000,
-      },
-      {
-        id: 402,
-        name: 'Electron Desktop Artifact Build',
-        workflow: 'release-desktop.yml',
-        branch: 'main',
-        status: 'completed',
-        conclusion: 'success',
-        createdAt: '1 hour ago',
-        durationMs: 180000,
-      },
-      {
-        id: 403,
-        name: 'Security Audit & Dependency Scan',
-        workflow: 'security.yml',
-        branch: 'feature/phase-4-cloud',
-        status: 'completed',
-        conclusion: 'success',
-        createdAt: '2 hours ago',
-        durationMs: 24000,
-      },
-    ];
+    const repos = await this.getRepositories();
+    const runs: GitHubActionRun[] = [];
+    for (const repo of repos.slice(0, 5)) {
+      const result = await this.request<{ workflow_runs: Array<Record<string, any>> }>(`/repos/${encodeURIComponent(repo.fullName)}/actions/runs?per_page=20`);
+      runs.push(...result.workflow_runs.map((run) => ({
+        id: run.id, name: run.name || run.display_title || 'Workflow run', workflow: run.path || '', branch: run.head_branch || '',
+        status: run.status === 'completed' ? 'completed' : run.status === 'queued' ? 'queued' : 'in_progress',
+        conclusion: run.conclusion === 'success' || run.conclusion === 'failure' || run.conclusion === 'cancelled' || run.conclusion === 'neutral' ? run.conclusion : null,
+        createdAt: run.created_at || '', durationMs: run.run_started_at && run.updated_at ? Math.max(0, new Date(run.updated_at).getTime() - new Date(run.run_started_at).getTime()) : 0,
+      })));
+    }
+    return runs;
   }
 }
 

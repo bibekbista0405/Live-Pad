@@ -11,6 +11,9 @@ export function GitHubPanel() {
   const [issues, setIssues] = useState<GitHubIssue[]>([]);
   const [actionRuns, setActionRuns] = useState<GitHubActionRun[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [token, setToken] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     githubService.init().then(() => {
@@ -22,16 +25,25 @@ export function GitHubPanel() {
   }, []);
 
   const loadData = async () => {
-    setRepos(await githubService.getRepositories());
-    setPrs(await githubService.getPullRequests());
-    setIssues(await githubService.getIssues());
-    setActionRuns(await githubService.getActionRuns());
+    setLoading(true);
+    setError(null);
+    try {
+      const [nextRepos, nextPrs, nextIssues, nextRuns] = await Promise.all([
+        githubService.getRepositories(), githubService.getPullRequests(), githubService.getIssues(), githubService.getActionRuns()
+      ]);
+      setRepos(nextRepos); setPrs(nextPrs); setIssues(nextIssues); setActionRuns(nextRuns);
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setLoading(false); }
   };
 
   const handleLogin = async () => {
-    await githubService.loginWithGitHub();
-    setIsAuth(true);
-    loadData();
+    setError(null);
+    try {
+      await githubService.loginWithGitHub(token);
+      setIsAuth(true);
+      setToken('');
+      await loadData();
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   };
 
   const handleLogout = async () => {
@@ -47,7 +59,7 @@ export function GitHubPanel() {
           <svg className="w-4 h-4 fill-current text-white" viewBox="0 0 24 24">
             <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
           </svg>
-          <span className="font-bold text-xs uppercase tracking-wide text-white">GitHub Enterprise</span>
+          <span className="font-bold text-xs uppercase tracking-wide text-white">GitHub</span>
         </div>
 
         {isAuth ? (
@@ -60,7 +72,7 @@ export function GitHubPanel() {
           </button>
         ) : (
           <button
-            onClick={handleLogin}
+            onClick={() => document.querySelector<HTMLInputElement>('input[aria-label="GitHub token"]')?.focus()}
             className="px-2 py-1 bg-[#238636] hover:bg-[#2ea043] text-white rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer"
           >
             <LogIn className="w-3 h-3" />
@@ -76,13 +88,21 @@ export function GitHubPanel() {
           <div className="text-xs text-[#858585]">
             Connect your GitHub account to access repositories, manage pull requests, review code inline, and view workflow status.
           </div>
-          <button
-            onClick={handleLogin}
-            className="px-4 py-2 bg-[#238636] hover:bg-[#2ea043] text-white rounded text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow"
-          >
+          <input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleLogin(); }}
+            placeholder="Paste GitHub personal access token"
+            aria-label="GitHub token"
+            autoComplete="off"
+            className="w-full max-w-sm px-3 py-2 bg-[#181818] border border-[#333] rounded text-xs text-white outline-none focus:border-[#238636]"
+          />
+          <button onClick={() => void handleLogin()} disabled={!token.trim() || loading} className="px-4 py-2 bg-[#238636] hover:bg-[#2ea043] disabled:opacity-50 text-white rounded text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow">
             <LogIn className="w-4 h-4" />
-            <span>Connect GitHub Account</span>
+            <span>{loading ? 'Connecting…' : 'Connect GitHub Account'}</span>
           </button>
+          {error && <div className="max-w-sm text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2">{error}</div>}
         </div>
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">

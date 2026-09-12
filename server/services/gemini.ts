@@ -86,3 +86,31 @@ export async function cleanupDictation({
   const cleanedText = response.text ? response.text.trim() : text;
   return { cleanedText };
 }
+
+export interface CopilotParams {
+  prompt: string;
+  activeFile?: { name: string; language?: string; content?: string } | null;
+  files?: Array<{ name: string; language?: string; path?: string; content?: string }>;
+}
+
+export async function generateCopilotResponse({ prompt, activeFile, files = [] }: CopilotParams) {
+  const ai = getGeminiClient();
+  if (!ai) throw new Error('Gemini API key is not configured on server');
+
+  const workspaceContext = files.slice(0, 30).map((file) =>
+    `FILE: ${file.path || file.name}\nLANGUAGE: ${file.language || 'unknown'}\n${(file.content || '').slice(0, 12000)}`
+  ).join('\n\n');
+  const activeContext = activeFile
+    ? `ACTIVE FILE: ${activeFile.name}\nLANGUAGE: ${activeFile.language || 'unknown'}\n${(activeFile.content || '').slice(0, 20000)}`
+    : 'No active file is open.';
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: [
+      { text: `You are LivePad AI Copilot, a practical senior software engineer. Answer the user's request using the supplied workspace context. Never claim to have changed a file unless the response only proposes a patch. Prefer concrete, compilable code. If asked to refactor or fix code, return the proposed code in one fenced block and briefly explain the important changes. If the request is explanatory, do not invent facts about code that is not present.\n\nUSER REQUEST:\n${prompt}\n\n${activeContext}\n\nWORKSPACE CONTEXT:\n${workspaceContext || 'No additional workspace files were supplied.'}` }
+    ],
+    config: { systemInstruction: 'Be precise, security-conscious, and honest about what you can actually execute. Do not fabricate test results, APIs, files, or successful changes.' }
+  });
+
+  return { text: response.text?.trim() || 'Gemini returned an empty response.' };
+}

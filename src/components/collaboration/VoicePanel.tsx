@@ -75,14 +75,15 @@ export function VoicePanel({
           try {
             stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           } catch (err: any) {
-            console.warn("Microphone access denied or unavailable; simulating spatial voice room.", err);
+            setVoiceError(err?.message || 'Microphone access was denied or is unavailable.');
+            return;
           }
         }
         
         setAudioStream(stream);
         setIsJoined(true);
 
-        // WebAudio Analysis for simulated or real voice level
+        // WebAudio analysis for the real local microphone stream
         try {
           const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
           if (AudioContextClass) {
@@ -126,23 +127,8 @@ export function VoicePanel({
     }
   };
 
-  // Simulate remote user intermittent speaking activity for realistic room feedback
-  useEffect(() => {
-    if (!isJoined) return;
-    const interval = setInterval(() => {
-      const otherUsers = activeUsers.filter(u => u.uid !== currentUid);
-      if (otherUsers.length > 0) {
-        const randomUser = otherUsers[Math.floor(Math.random() * otherUsers.length)];
-        const isSpeaking = Math.random() > 0.6;
-        setActiveSpeakers(prev => ({
-          ...prev,
-          [randomUser.uid]: isSpeaking
-        }));
-      }
-    }, 2500);
-
-    return () => clearInterval(interval);
-  }, [isJoined, activeUsers, currentUid]);
+  // Remote speaking indicators are driven only by real collaboration presence/audio events.
+  // We intentionally do not fabricate remote speaker activity.
 
   if (!isOpen) return null;
 
@@ -170,7 +156,7 @@ export function VoicePanel({
                 )}
               </h3>
               <p className="text-xs text-slate-400">
-                Low-latency peer voice collaboration for room #{roomId || 'Local'}
+                Local microphone monitor for room #{roomId || 'Local'}
               </p>
             </div>
           </div>

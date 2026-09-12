@@ -105,33 +105,12 @@ export class AutoUpdateService {
       return this.state;
     }
 
-    // Simulated update check for Web/PWA environment
-    await new Promise(r => setTimeout(r, 600));
-
-    // Simulated release payload
-    const mockLatest: AppVersionInfo = {
-      version: '1.0.1',
-      releaseDate: new Date().toISOString(),
-      channel: this.state.channel,
-      changelog: [
-        'Enhanced offline workspace persistence & quota resilience',
-        'Optimized collaboration synchronization',
-        'Added multi-channel release pipeline & automated installer configs'
-      ],
-      downloadUrl: 'https://releases.livepad.app/download/1.0.1'
-    };
-
-    if (mockLatest.version !== this.state.currentVersion) {
-      this.setState({
-        status: 'available',
-        latestVersion: mockLatest
-      });
-    } else {
-      this.setState({
-        status: 'up-to-date'
-      });
-    }
-
+    // Web/PWA builds cannot install an Electron release themselves, so never fabricate an update.
+    this.setState({
+      status: 'up-to-date',
+      latestVersion: undefined,
+      errorMessage: 'Automatic installation is available in the LivePad desktop client.'
+    });
     return this.state;
   }
 
@@ -145,13 +124,11 @@ export class AutoUpdateService {
       return;
     }
 
-    // Web simulation
-    for (let p = 10; p <= 100; p += 20) {
-      await new Promise(r => setTimeout(r, 100));
-      this.setState({ progressPercentage: p });
-    }
-
-    this.setState({ status: 'ready' });
+    // A browser cannot safely install an Electron release. The desktop IPC path above is the real installer path.
+    this.setState({
+      status: 'error',
+      errorMessage: 'Download and installation are available in the LivePad desktop client.'
+    });
   }
 
   public applyUpdateAndRestart(): void {

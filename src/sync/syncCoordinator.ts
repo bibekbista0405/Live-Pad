@@ -3,6 +3,8 @@ export interface SyncTask {
   run: () => Promise<void>;
 }
 
+export type SyncState = 'idle' | 'running' | 'waiting';
+
 export interface SyncCoordinatorOptions {
   baseDelayMs?: number;
   maxDelayMs?: number;
@@ -25,6 +27,12 @@ export class SyncCoordinator {
 
   get isRunning(): boolean {
     return this.running;
+  }
+
+  get state(): SyncState {
+    if (this.running) return 'running';
+    if (this.scheduled) return 'waiting';
+    return 'idle';
   }
 
   async run(task: SyncTask): Promise<boolean> {

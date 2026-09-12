@@ -4,37 +4,39 @@ import type { WebContents } from 'electron';
 
 const authorizedRoots = new Map<number, Set<string>>();
 
+/** Windows can return extended-length paths from realpathSync.native. Convert them to native paths for comparison. */
+function normalizeComparablePath(value: string): string {
+  let normalized = value.trim();
+  if (process.platform === 'win32') {
+    if (normalized.startsWith('\\\\?\\UNC\\')) normalized = `\\\\${normalized.slice(8)}`;
+    else if (normalized.startsWith('\\\\?\\')) normalized = normalized.slice(4);
+    normalized = path.win32.normalize(normalized);
+    return normalized.replace(/[\\/]+$/, '').toLowerCase();
+  }
+  normalized = path.posix.normalize(normalized);
+  return normalized.replace(/\/+$/, '');
+}
+
 function canonicalExistingPath(targetPath: string): string {
-  return fs.realpathSync.native(path.resolve(targetPath));
-}
-
-function stripWindowsExtendedPrefix(value: string): string {
-  if (value.startsWith('\\\\?\\UNC\\')) return `\\\\${value.slice(8)}`;
-  if (value.startsWith('\\\\?\\')) return value.slice(4);
-  return value;
-}
-
-function normalizeForComparison(targetPath: string): string {
-  if (process.platform !== 'win32') return path.posix.normalize(path.posix.resolve(targetPath));
-
-  const normalized = stripWindowsExtendedPrefix(path.win32.normalize(path.win32.resolve(targetPath)));
-  return normalized.toLowerCase();
+  // realpath (not native) gives a stable path representation that matches the rest of Electron's APIs.
+  return fs.realpathSync(path.resolve(targetPath));
 }
 
 function isWithinRoot(targetPath: string, rootPath: string): boolean {
-  const target = normalizeForComparison(targetPath);
-  const root = normalizeForComparison(rootPath);
+  const target = normalizeComparablePath(targetPath);
+  const root = normalizeComparablePath(rootPath);
+  if (!target || !root) return false;
+  if (target === root) return true;
+
   const relative = process.platform === 'win32'
     ? path.win32.relative(root, target)
     : path.posix.relative(root, target);
-
-  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+  return relative !== '' && relative !== '..' && !relative.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !(process.platform === 'win32' ? path.win32.isAbsolute(relative) : path.posix.isAbsolute(relative));
 }
 
 export function authorizeWorkspaceRoot(webContents: WebContents, selectedPath: string): string {
   const root = canonicalExistingPath(selectedPath);
   if (!fs.statSync(root).isDirectory()) throw new Error('Workspace root must be a directory');
-
   let roots = authorizedRoots.get(webContents.id);
   if (!roots) {
     roots = new Set<string>();
@@ -54,7 +56,6 @@ export function getAuthorizedRoots(webContentsId: number): string[] {
 
 export function assertWorkspacePath(webContentsId: number, targetPath: string, options: { allowMissing?: boolean } = {}): string {
   if (typeof targetPath !== 'string' || !targetPath.trim()) throw new Error('Path is required');
-
   const resolved = path.resolve(targetPath);
   const roots = authorizedRoots.get(webContentsId);
   if (!roots || roots.size === 0) throw new Error('No authorized workspace. Open a project folder first.');
@@ -76,10 +77,8 @@ export function assertWorkspacePath(webContentsId: number, targetPath: string, o
     if (parent === ancestor) throw new Error('Unable to validate path');
     ancestor = parent;
   }
-
   const canonicalAncestor = canonicalExistingPath(ancestor);
   if (!isWithinRoot(canonicalAncestor, matchingRoot)) throw new Error('Path resolves outside the authorized workspace');
-
   return resolved;
 }
 

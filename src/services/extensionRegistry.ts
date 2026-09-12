@@ -621,7 +621,7 @@ class ExtensionRegistryManager {
           }
         });
       } else {
-        // Auto-install Dracula, Material Icons, React Snippets, Spanish & AI Security Scanner as default enabled demo extensions
+        // Auto-install Dracula, Material Icons, React Snippets, Spanish & AI Security Scanner as default enabled built-in extensions
         const defaultInstalls = [
           'theme-dracula-official',
           'icons-material-theme',

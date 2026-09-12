@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/security';
-import { transcribeAudio, cleanupDictation, hasGeminiKey } from '../services/gemini';
+import { transcribeAudio, cleanupDictation, generateCopilotResponse, hasGeminiKey } from '../services/gemini';
 
 export const aiRouter = Router();
 
@@ -49,4 +49,19 @@ aiRouter.post('/dictation/cleanup', requireAuth, async (req, res) => {
 // Whisper API Proxy Fallback Route
 aiRouter.post('/dictation/whisper', requireAuth, (req, res) => {
   return res.status(501).json({ error: 'Whisper fallback route. Use Gemini AI or Browser Speech engine.' });
+});
+
+// Workspace-aware AI Copilot
+aiRouter.post('/ai/copilot', requireAuth, async (req, res) => {
+  try {
+    const { prompt, activeFile, files } = req.body;
+    if (typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
+    if (!hasGeminiKey()) return res.status(503).json({ error: 'Gemini API key is not configured on server' });
+    const safeFiles = Array.isArray(files) ? files.slice(0, 30) : [];
+    const result = await generateCopilotResponse({ prompt: prompt.slice(0, 12000), activeFile, files: safeFiles });
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[Server /api/ai/copilot Error]:', err);
+    return res.status(500).json({ error: err?.message || 'AI Copilot request failed' });
+  }
 });

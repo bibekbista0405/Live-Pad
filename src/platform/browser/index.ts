@@ -108,7 +108,7 @@ export class BrowserPlatform implements IPlatformServices {
     });
   }
 
-  // Native Filesystem Services (Browser Mock / Web Fallbacks)
+  // Browser filesystem capability boundary
   public async readDir(): Promise<DirectoryItem[]> {
     return [];
   }
@@ -196,15 +196,15 @@ export class BrowserPlatform implements IPlatformServices {
 
   // Native Terminal & Execution
   public async getShells(): Promise<{ name: string; path: string; isDefault: boolean }[]> {
-    return [{ name: 'Web Simulated Shell', path: 'browser', isDefault: true }];
+    return [];
   }
 
-  public async executeCommand(command: string): Promise<{ processId: string; status: string }> {
-    return { processId: `web-${Date.now()}`, status: 'web-simulated' };
+  public async executeCommand(_command: string): Promise<{ processId: string; status: string }> {
+    throw new Error('Native terminal execution requires the LivePad Desktop Edition.');
   }
 
   public async killProcess(): Promise<boolean> {
-    return true;
+    throw new Error('Native process control requires the LivePad Desktop Edition.');
   }
 
   public onTerminalOutput(): () => void {
@@ -266,19 +266,19 @@ export class BrowserPlatform implements IPlatformServices {
 
   // Debugger Services
   public async launchDebugger(): Promise<{ sessionId: string; port: number; status: string }> {
-    return { sessionId: `web-debug-${Date.now()}`, port: 0, status: 'web-simulated' };
+    throw new Error('Native debugging requires the LivePad Desktop Edition.');
   }
 
   public async controlDebugger(): Promise<boolean> {
-    return true;
+    throw new Error('Native debugging requires the LivePad Desktop Edition.');
   }
 
-  public async setDebuggerBreakpoint(_sessionId: string, file: string, line: number): Promise<{ verified: boolean; id: string }> {
-    return { verified: true, id: `bp-${file}-${line}` };
+  public async setDebuggerBreakpoint(): Promise<{ verified: boolean; id: string }> {
+    throw new Error('Native debugging requires the LivePad Desktop Edition.');
   }
 
   public async evaluateDebugger(): Promise<any> {
-    return 'Web execution mode';
+    throw new Error('Native debugging requires the LivePad Desktop Edition.');
   }
 
   public onDebuggerOutput(): () => void {

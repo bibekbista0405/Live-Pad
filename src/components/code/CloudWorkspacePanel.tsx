@@ -8,6 +8,8 @@ export function CloudWorkspacePanel() {
   const [snapshots, setSnapshots] = useState<WorkspaceSnapshot[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [snapshotLabel, setSnapshotLabel] = useState('');
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
 
   useEffect(() => {
     loadWorkspaceData();
@@ -18,6 +20,8 @@ export function CloudWorkspacePanel() {
     const snaps = await cloudWorkspaceService.getSnapshots();
     setWorkspace(ws);
     setSnapshots(snaps);
+    setPendingSyncCount(await cloudWorkspaceService.getPendingSyncCount());
+    setLastSyncedAt(Date.now());
   };
 
   const handleModeChange = async (mode: 'local' | 'cloud' | 'hybrid') => {
@@ -27,18 +31,19 @@ export function CloudWorkspacePanel() {
 
   const handleCreateSnapshot = async () => {
     if (!snapshotLabel.trim()) return;
-    const snap = await cloudWorkspaceService.createVersionSnapshot(snapshotLabel.trim(), 45, 1024 * 380);
+    const snap = await cloudWorkspaceService.createVersionSnapshot(snapshotLabel.trim());
     setSnapshots([snap, ...snapshots]);
     setSnapshotLabel('');
     loadWorkspaceData();
   };
 
-  const handleTriggerSync = () => {
+  const handleTriggerSync = async () => {
     setIsSyncing(true);
-    setTimeout(() => {
+    try {
+      await loadWorkspaceData();
+    } finally {
       setIsSyncing(false);
-      loadWorkspaceData();
-    }, 800);
+    }
   };
 
   if (!workspace) return null;
@@ -49,7 +54,7 @@ export function CloudWorkspacePanel() {
       <div className="p-3 bg-[#252526] border-b border-[#2d2d2d] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <Cloud className="w-4 h-4 text-[#007acc]" />
-          <span className="font-bold text-xs uppercase tracking-wide text-white">Cloud Workspaces & Sync</span>
+          <span className="font-bold text-xs uppercase tracking-wide text-white">Workspace Sync</span>
         </div>
         <button
           onClick={handleTriggerSync}
@@ -115,11 +120,12 @@ export function CloudWorkspacePanel() {
         <div className="bg-[#252526] p-3 rounded-lg border border-[#333333] space-y-2">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <div className="text-xs font-bold text-white">Live Cloud Sync Active</div>
+            <div className="text-xs font-bold text-white">Local-first sync is active</div>
           </div>
           <div className="text-[11px] text-[#858585]">
-            Last synchronized: <span className="text-slate-300 font-mono">Just now</span>.
-            0 pending offline changes.
+            Cloud mode is a real connection mode only when a configured cloud provider is available; this panel never invents remote snapshots.
+            Last checked: <span className="text-slate-300 font-mono">{lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString() : '—'}</span>.
+            {pendingSyncCount} pending offline change{pendingSyncCount === 1 ? '' : 's'}.
           </div>
         </div>
 

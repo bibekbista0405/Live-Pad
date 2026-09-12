@@ -44,7 +44,7 @@ describe('Phase 6 — Release Engineering & Ecosystem Validation', () => {
       expect(['available', 'up-to-date']).toContain(state.status);
     });
 
-    it('should handle simulated download and update ready state', async () => {
+    it('should handle the desktop update lifecycle without faking web downloads', async () => {
       await autoUpdateService.checkForUpdates();
       if (autoUpdateService.getState().status === 'available') {
         await autoUpdateService.startDownload();

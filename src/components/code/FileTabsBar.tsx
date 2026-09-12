@@ -77,7 +77,7 @@ export default function FileTabsBar({
   });
 
   return (
-    <div className="h-9 bg-[#252526] border-b border-[#1e1e1e] flex items-center px-0 gap-0 overflow-x-auto shrink-0 select-none no-scrollbar relative">
+    <div className="livepad-code-tabs h-9 border-b flex items-center px-0 gap-0 overflow-x-auto shrink-0 select-none no-scrollbar relative">
       <div className="flex items-center h-full min-w-0 flex-1 overflow-x-auto no-scrollbar">
         {sortedFiles.map((file) => {
           const isActive = file.id === activeFileId;
@@ -95,13 +95,9 @@ export default function FileTabsBar({
               onDrop={(e) => handleDrop(e, file.id)}
               onClick={() => onSelectTab(file.id)}
               onContextMenu={(e) => handleContextMenu(e, file.id)}
-              className={`group relative flex items-center gap-2 px-3 h-full text-xs font-sans cursor-pointer border-r border-[#1e1e1e] shrink-0 max-w-[200px] transition-all ${
+              className={`livepad-code-tab group relative flex items-center gap-2 px-3 h-full text-xs cursor-pointer border-r shrink-0 max-w-[200px] transition-all ${
                 isDragged ? 'opacity-40 bg-slate-800' : ''
-              } ${isDragTarget ? 'border-l-2 border-l-[#007acc] bg-[#2a2d2e]' : ''} ${
-                isActive
-                  ? 'bg-[#1e1e1e] text-white font-medium border-t-2 border-t-[#007acc]'
-                  : 'bg-[#2d2d2d] text-[#969696] hover:bg-[#2a2d2e] hover:text-[#cccccc] border-t-2 border-t-transparent'
-              }`}
+              } ${isDragTarget ? 'border-l-2 border-l-[#007acc] bg-[#2a2d2e]' : ''} ${isActive ? 'is-active text-white font-medium' : 'text-slate-400'}`}
             >
               {isPinned && <Pin className="w-3 h-3 text-[#007acc] shrink-0 transform -rotate-45" />}
 

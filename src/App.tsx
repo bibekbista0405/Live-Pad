@@ -91,7 +91,8 @@ import {
   FolderKanban,
   ExternalLink,
   ArrowUpDown,
-  Edit3
+  Edit3,
+  Code2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db, isFirebaseConfigured, auth, ensureAuth, handleFirestoreError, OperationType, isFirestoreQuotaExhausted, markQuotaExhausted } from './lib/firebase';
@@ -1862,7 +1863,6 @@ export default function App() {
 
   // Code Playground / Code Editor Modes and States
   const [codeLanguage, setCodeLanguage] = useState<'html' | 'javascript'>('html');
-  const [classroomRole, setClassroomRole] = useState<'standard' | 'teacher' | 'student'>('standard');
   const [consoleLogs, setConsoleLogs] = useState<{ type: 'log' | 'info' | 'warn' | 'error'; text: string; id: number }[]>([]);
   const [isAutoRun, setIsAutoRun] = useState<boolean>(true);
   const [htmlPreviewDoc, setHtmlPreviewDoc] = useState<string>('');
@@ -2564,8 +2564,38 @@ export default function App() {
     deleteWorkspace,
     workspaceType,
     workspaceName,
-    workspaceStatus
+    workspaceStatus,
+    codeModeOpen,
+    setCodeModeOpen
   } = useLiveRoom(roomCode, userName || getRandomDefaultName());
+
+  const isTeachingSession = workspaceType === 'teaching';
+  const isTeacher = currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'owner';
+  const classroomRole = isTeachingSession ? (isTeacher ? 'teacher' : 'student') : 'standard';
+  const canControlCodeMode = isTeacher && Boolean(roomCode);
+
+  // In teaching sessions Code Studio is a shared classroom surface. The room's
+  // Firestore state is authoritative, so opening it from the teacher's device
+  // automatically opens it for every participant.
+  useEffect(() => {
+    if (!isTeachingSession || !roomCode) return;
+    setIsCodeMode(Boolean(codeModeOpen));
+  }, [isTeachingSession, roomCode, codeModeOpen, setIsCodeMode]);
+
+  const handleCodeModeToggle = useCallback(async () => {
+    if (isTeachingSession) {
+      if (!canControlCodeMode) {
+        addToast('info', 'Code Studio is controlled by the teacher for this learning session.');
+        return;
+      }
+      const next = !codeModeOpen;
+      const ok = await setCodeModeOpen(next);
+      if (ok) addToast('info', next ? 'Code Studio is now open for everyone.' : 'Code Studio is closed for everyone.');
+      else addToast('error', 'Could not update the shared Code Studio state.');
+      return;
+    }
+    setIsCodeMode(prev => !prev);
+  }, [isTeachingSession, canControlCodeMode, codeModeOpen, setCodeModeOpen, setIsCodeMode, addToast]);
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [transferTarget, setTransferTarget] = useState<any>(null);
@@ -3720,12 +3750,11 @@ console.warn("Verify your variables before deployment!");
     const wsType = selectedWorkspaceType || 'team';
     const typeDef = WORKSPACE_TYPES[wsType] || WORKSPACE_TYPES.team;
     const wsName = customWorkspaceName.trim() || typeDef.title;
-    const creatorRole = typeDef.creatorRole;
     const limit = customParticipantLimit && customParticipantLimit > 0 ? customParticipantLimit : typeDef.defaultLimit;
 
     const userColorLocal = localStorage.getItem('livepad_color') || '#3b82f6';
 
-    const welcomeContent = `Welcome to ${wsName} (${uniqueCode})!\nWorkspace Type: ${typeDef.title} (${typeDef.icon})\n\nThis is a real-time collaborative workspace. Share this room code to begin drafting layout structures together instantly.\n\n⚡ WORKSPACE POWER FEATURES:\n★ Role-Based Collaboration: Creator is assigned ${creatorRole.toUpperCase()}. Joined participants automatically receive appropriate roles.\n★ HTML & JS Code Playgrounds: Write dynamic components or scripts with reactive sandbox renders.\n★ Integrated Snippets library: Inject pre-written components right at your cursor.\n\n--- KEY SHORTCUTS ---\nCtrl + S   ➔ Sync Force\nCtrl + D   ➔ Toggle Theme\nCtrl + Shift + C   ➔ Copy Code\n?   ➔ Open Shortcuts Menu`;
+    const welcomeContent = `Welcome to ${wsName} (${uniqueCode})!\n\nStart together, keep it simple, and learn by doing.\n\nIn Code Studio you can:\n• open the same coding session together\n• edit code in real time\n• run the code and see the result\n• ask questions in chat and discuss code\n\n${wsType === 'teaching' ? 'Teacher: open Code Studio when the class is ready. Students will follow automatically.' : 'Friends: everyone can learn, experiment, and help each other.'}\n\nTip: start with one small change, then Run & Check.`;
 
     try {
       if (isFirebaseConfigured && db) {
@@ -3743,6 +3772,7 @@ console.warn("Verify your variables before deployment!");
           status: 'active',
           privacy: selectedPrivacy || 'public',
           participantLimit: limit,
+          defaultRole: wsType === 'teaching' ? 'student' : 'member',
           participants: {
             [currentUid]: {
               uid: currentUid,
@@ -3764,6 +3794,7 @@ console.warn("Verify your variables before deployment!");
           updatedAt: serverTimestamp(),
           title: wsName,
           label: '',
+          codeModeOpen: false,
           users: {
             [currentUid]: {
               uid: currentUid,
@@ -3779,16 +3810,10 @@ console.warn("Verify your variables before deployment!");
           attachments: []
         };
 
-        console.log('[DEBUG Room Creation] auth.currentUser:', auth?.currentUser);
-        console.log('[DEBUG Room Creation] UID:', currentUid);
-        console.log('[DEBUG Room Creation] Collection Path: rooms');
-        console.log('[DEBUG Room Creation] Document ID:', uniqueCode);
-        console.log('[DEBUG Room Creation] Payload:', roomPayload);
-
         if (!isFirestoreQuotaExhausted()) {
           try {
             await setDoc(doc(db, 'rooms', uniqueCode), roomPayload);
-            console.log('[DEBUG Room Creation] setDoc operation succeeded for document:', uniqueCode);
+            
           } catch (firestoreErr: any) {
             if (String(firestoreErr).includes('resource-exhausted') || String(firestoreErr).includes('Quota')) {
               markQuotaExhausted();
@@ -4092,10 +4117,10 @@ console.warn("Verify your variables before deployment!");
           /* ================= LANDING PAGE REDESIGN ================= */
           <main
             key="landing"
-            className="livepad-scroll-surface flex-1 w-full h-full overflow-y-auto max-w-6xl mx-auto px-4 py-8 md:py-16 flex flex-col items-center justify-between z-10 no-scrollbar"
+            className="livepad-scroll-surface livepad-landing-shell flex-1 w-full h-full overflow-y-auto max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 md:py-8 flex flex-col items-center justify-between z-10 no-scrollbar"
           >
             {/* Upper Nav Header */}
-            <div className="w-full flex items-center justify-between pointer-events-auto">
+            <div className="livepad-landing-nav w-full flex items-center justify-between pointer-events-auto">
               <Logo />
               <div className="flex items-center gap-4">
                 {isInstallable && !isAppInstalled && (
@@ -4147,7 +4172,7 @@ console.warn("Verify your variables before deployment!");
             </div>
 
             {/* Title / Slogan Section */}
-            <div className="my-auto py-12 flex flex-col items-center text-center max-w-3xl space-y-6">
+            <div className="my-auto py-10 md:py-14 flex flex-col items-center text-center max-w-4xl space-y-6">
               
               <div className="relative mb-2 mt-4">
                 {/* Large Center Logo with Click pointer rays to match exact design */}
@@ -4159,7 +4184,7 @@ console.warn("Verify your variables before deployment!");
                 >
                   <Logo iconSize={110} showText={false} />
                   
-                  <h2 className="text-5xl md:text-6xl font-black tracking-[-0.04em] font-sans mt-1 flex items-center justify-center uppercase select-none">
+                  <h2 className="text-5xl md:text-7xl font-black tracking-[-0.055em] font-sans mt-1 flex items-center justify-center uppercase select-none">
                     <span className="text-[#0000ff] dark:text-[#3b82f6]">Live</span>
                     <span className="text-slate-800 dark:text-zinc-100">Pad</span>
                   </h2>
@@ -4173,7 +4198,7 @@ console.warn("Verify your variables before deployment!");
                 <div className="absolute -bottom-6 -left-6 w-14 h-14 rounded-full bg-cyan-400 animate-pulse opacity-30 blur-md" />
               </div>
 
-              <p className="text-lg md:text-xl text-indigo-900/60 dark:text-slate-400 font-medium tracking-wide max-w-xl">
+              <p className="text-base md:text-lg text-slate-600 dark:text-slate-400 font-medium tracking-wide max-w-2xl">
                 Real-time Collaboration. Infinite Expression.
               </p>
 
@@ -4203,10 +4228,10 @@ console.warn("Verify your variables before deployment!");
               )}
 
               {/* Dual Column Layout: Collaboration vs Personal Notepad */}
-              <div className="w-full max-w-5xl mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+              <div className="w-full max-w-5xl mt-5 grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
                 
                 {/* COLUMN 1: COLLABORATIVE ROOMS */}
-                <div className="p-6 rounded-2xl bg-white/85 dark:bg-zinc-900/80 border border-slate-200/80 dark:border-zinc-800/80 shadow-xs flex flex-col justify-between gap-5 h-full min-h-[360px]">
+                <div className="livepad-landing-panel p-6 md:p-7 rounded-2xl bg-white/90 dark:bg-zinc-900/85 border border-slate-200/80 dark:border-zinc-800/80 shadow-sm flex flex-col justify-between gap-5 h-full min-h-[350px]">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-zinc-800/60 pb-3">
                       <div className="flex items-center gap-2">
@@ -4849,7 +4874,7 @@ console.warn("Verify your variables before deployment!");
 
                         <button
                           type="button"
-                          onClick={() => setIsCodeMode(!isCodeMode)}
+                          onClick={() => handleCodeModeToggle()}
                           className={`p-2 rounded-xl transition-all cursor-pointer ${
                             isCodeMode ? 'bg-amber-500/20 text-amber-500' : 'text-slate-500 hover:text-amber-500 hover:bg-slate-200 dark:hover:bg-zinc-800'
                           }`}
@@ -5337,7 +5362,7 @@ console.warn("Verify your variables before deployment!");
                           <div className="mt-1 space-y-1">
                             <button
                               type="button"
-                              onClick={() => setIsCodeMode(!isCodeMode)}
+                              onClick={() => handleCodeModeToggle()}
                               className={`w-full text-left px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer border ${
                                 isCodeMode
                                   ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 shadow-xs'
@@ -5575,38 +5600,19 @@ console.warn("Verify your variables before deployment!");
                       {/* Font togglers/Classroom togglers built beautifully */}
                       <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto sm:justify-end">
                         {isCodeMode ? (
-                          <div className="flex bg-slate-100 dark:bg-[#141416] p-0.5 rounded-lg border border-slate-200/60 dark:border-zinc-800/80 shrink-0 select-none items-center shadow-xs">
-                            <span className="text-[10px] uppercase font-mono px-2 font-black text-slate-400 dark:text-zinc-550 border-r border-slate-200 dark:border-zinc-800/80 mr-1 py-0.5">Role:</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setClassroomRole('standard');
-                                addToast('info', 'Workspace mode reset to Independent standard coding.');
-                              }}
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${classroomRole === 'standard' ? 'bg-white dark:bg-zinc-800 text-teal-500 shadow-xs' : 'text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300'}`}
-                            >
-                              Standard
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setClassroomRole('teacher');
-                                addToast('info', 'Classroom Instructor Mode: Spawning challenge templates and instructional guides unlocked 👨‍🏫');
-                              }}
-                              className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1 ${classroomRole === 'teacher' ? 'bg-white dark:bg-zinc-800 text-indigo-500 shadow-xs' : 'text-slate-400 hover:text-indigo-400'}`}
-                            >
-                              Teacher 👨‍🏫
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setClassroomRole('student');
-                                addToast('info', 'Classroom Student Mode: Follow teacher live-streamed code templates and input solver 🧑‍🎓');
-                              }}
-                              className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1 ${classroomRole === 'student' ? 'bg-white dark:bg-zinc-800 text-rose-500 shadow-xs' : 'text-slate-400 hover:text-rose-400'}`}
-                            >
-                              Student 🧑‍🎓
-                            </button>
+                          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] dark:bg-cyan-400/[0.04] shrink-0">
+                            {isTeachingSession ? (
+                              <>
+                                <GraduationCap className={`w-3.5 h-3.5 ${isTeacher ? 'text-indigo-500' : 'text-cyan-500'}`} />
+                                <span className="text-[10px] font-bold text-slate-600 dark:text-zinc-300">{isTeacher ? 'Teacher controls' : 'Learning session'}</span>
+                                <span className="text-[10px] text-slate-400 dark:text-zinc-500">{isTeacher ? 'Live for everyone' : 'Following teacher'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Code2 className="w-3.5 h-3.5 text-cyan-500" />
+                                <span className="text-[10px] font-bold text-slate-600 dark:text-zinc-300">Practice mode</span>
+                              </>
+                            )}
                           </div>
                         ) : (
                           <>
@@ -5908,7 +5914,7 @@ console.warn("Verify your variables before deployment!");
                           whileTap={{ scale: 0.95 }}
                           onClick={() => {
                             const nextVal = !isCodeMode;
-                            setIsCodeMode(nextVal);
+                            handleCodeModeToggle();
                             addToast('info', nextVal ? 'Code Playground mode enabled! Write and execute HTML/JS code collaboratively.' : 'Standard collaborative text writing mode.');
                           }}
                           className={`cursor-pointer px-3 py-1.5 rounded-lg border transition-all text-[11px] font-bold flex items-center gap-1.5 focus:outline-hidden ${
@@ -7037,7 +7043,7 @@ console.warn("Verify your variables before deployment!");
                                         onAddToast={addToast}
                                         codeLanguage={codeLanguage}
                                         onChangeCodeLanguage={(lang) => setCodeLanguage(lang as 'html' | 'javascript')}
-                                        onToggleCodeMode={() => setIsCodeMode(!isCodeMode)}
+                                        onToggleCodeMode={() => handleCodeModeToggle()}
                                       />
                                     );
                                   case 'personal':
@@ -7684,7 +7690,7 @@ console.warn("Verify your variables before deployment!");
                 localStorage.setItem('livepad_active_note_id', id);
               }}
               onSelectWorkspace={(code) => handleNavigateRoom(code)}
-              onToggleCodeMode={() => setIsCodeMode(!isCodeMode)}
+              onToggleCodeMode={() => handleCodeModeToggle()}
               onToggleLeftSidebar={layout.toggleLeftSidebar}
               onToggleRightSidebar={layout.toggleRightSidebar}
               onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
@@ -7868,7 +7874,11 @@ console.warn("Verify your variables before deployment!");
             onChangeCodeLanguage={(lang) => setCodeLanguage(lang as 'html' | 'javascript')}
             roomCode={roomCode}
             userName={userName}
-            userRole={classroomRole === 'teacher' ? 'teacher' : 'student'}
+            userRole={currentRole}
+            isTeachingSession={isTeachingSession}
+            canControlCodeMode={canControlCodeMode}
+            codeModeOpen={codeModeOpen}
+            onRequestCodeMode={handleCodeModeToggle}
             activeUsers={activeUsers}
             isReadOnly={isReadOnly}
             onAddToast={addToast}

@@ -83,6 +83,10 @@ export interface NoteRoom {
   creatorRole: WorkspaceRole;
   ownerId?: string;
   ownerName?: string;
+  /** Authoritative live classroom control: when true, Code Studio opens for every participant. */
+  codeModeOpen?: boolean;
+  codeModeOpenedBy?: string;
+  codeModeOpenedAt?: number;
   status: WorkspaceStatus;
   privacy: WorkspacePrivacy;
   participantLimit: number;

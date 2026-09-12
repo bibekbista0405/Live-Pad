@@ -143,6 +143,9 @@ service cloud.firestore {
         && (!data.keys().hasAny(['workspaceName']) || (data.workspaceName is string && data.workspaceName.size() <= 256))
         && (!data.keys().hasAny(['title']) || (data.title is string && data.title.size() <= 256))
         && (!data.keys().hasAny(['label']) || (data.label is string && data.label.size() <= 256))
+        && (!data.keys().hasAny(['codeModeOpen']) || data.codeModeOpen is bool)
+        && (!data.keys().hasAny(['codeModeOpenedBy']) || (data.codeModeOpenedBy is string && data.codeModeOpenedBy.size() <= 128))
+        && (!data.keys().hasAny(['codeModeOpenedAt']) || data.codeModeOpenedAt is timestamp)
         && (!data.keys().hasAny(['creatorId']) || (data.creatorId is string && data.creatorId.size() <= 128))
         && (!data.keys().hasAny(['createdBy']) || (data.createdBy is string && data.createdBy.size() <= 128))
         && (!data.keys().hasAny(['ownerId']) || (data.ownerId is string && data.ownerId.size() <= 128))
@@ -174,6 +177,9 @@ service cloud.firestore {
         && incomingData.updatedAt is timestamp
         && (!changed.hasAny(['title']) || (incomingData.title is string && incomingData.title.size() <= 256))
         && (!changed.hasAny(['label']) || (incomingData.label is string && incomingData.label.size() <= 256))
+        && (!changed.hasAny(['codeModeOpen']) || incomingData.codeModeOpen is bool)
+        && (!changed.hasAny(['codeModeOpenedBy']) || (incomingData.codeModeOpenedBy is string && incomingData.codeModeOpenedBy.size() <= 128))
+        && (!changed.hasAny(['codeModeOpenedAt']) || incomingData.codeModeOpenedAt is timestamp)
         && (!changed.hasAny(['attachments']) || (incomingData.attachments is list && incomingData.attachments.size() <= 100))
         && (!changed.hasAny(['users']) || incomingData.users is map)
         && (!changed.hasAny(['typingUsers']) || incomingData.typingUsers is map)
@@ -278,6 +284,23 @@ service cloud.firestore {
 
       // Public rooms allow a caller to add only their own participant entry.
       allow update: if isPublicSelfJoin();
+
+      // Teacher-led Code Studio control. This is the authoritative classroom switch:
+      // one update opens/closes Code Studio for every participant in the room.
+      allow update: if signedIn()
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'updatedAt', 'codeModeOpen', 'codeModeOpenedBy', 'codeModeOpenedAt'
+        ])
+        && (isOwnerData(resource.data) || isAdminData(resource.data) || (
+          resource.data.participants is map
+          && resource.data.participants.keys().hasAll([request.auth.uid])
+          && resource.data.participants[request.auth.uid].role == 'teacher'
+        ))
+        && request.resource.data.codeModeOpen is bool
+        && request.resource.data.codeModeOpenedBy == request.auth.uid
+        && request.resource.data.codeModeOpenedAt == request.time
+        && request.resource.data.updatedAt == request.time;
 
       // Owners/admins manage lifecycle and workspace settings.
       allow update: if signedIn()

@@ -316,6 +316,9 @@ export function useLiveRoom(roomId: string | null, userName: string) {
           updatedAt: data.updatedAt?.toDate?.()?.getTime() || Date.now(),
           title: data.title || data.workspaceName || '',
           label: data.label || '',
+          codeModeOpen: data.codeModeOpen === true,
+          codeModeOpenedBy: data.codeModeOpenedBy || '',
+          codeModeOpenedAt: data.codeModeOpenedAt?.toDate?.()?.getTime() || undefined,
           users: data.users || {},
           typingUsers: data.typingUsers || {},
           attachments: data.attachments || [],
@@ -633,6 +636,7 @@ export function useLiveRoom(roomId: string | null, userName: string) {
         updatedAt: Date.now(),
         title: savedTitleText,
         label: savedLabelText,
+        codeModeOpen: false,
         users: initialUsers,
         typingUsers: {},
         attachments: initialAttachments,
@@ -682,6 +686,12 @@ export function useLiveRoom(roomId: string | null, userName: string) {
           else if (type === 'title_change') {
             updated.title = data.title;
             localStorage.setItem(`livepad_local_room_title_${roomId}`, data.title);
+          }
+
+          else if (type === 'code_mode') {
+            updated.codeModeOpen = data.open === true;
+            updated.codeModeOpenedBy = data.openedBy || senderUid;
+            updated.codeModeOpenedAt = typeof data.openedAt === 'number' ? data.openedAt : Date.now();
           }
           
           else if (type === 'attachments_change') {
@@ -1356,6 +1366,35 @@ export function useLiveRoom(roomId: string | null, userName: string) {
   const { archiveWorkspace, restoreWorkspace, deleteWorkspace, updateParticipantRole, removeParticipant, transferOwnership } =
     useWorkspaceMembership({ roomId, uid, useFirebase, setRoom });
 
+  const setCodeModeOpen = useCallback(async (open: boolean) => {
+    if (!roomId || !room || !['owner', 'admin', 'teacher'].includes(currentRole)) return false;
+    const openedAt = Date.now();
+    setRoom(prev => prev ? { ...prev, codeModeOpen: open, codeModeOpenedBy: uid, codeModeOpenedAt: openedAt } : prev);
+    if (useFirebase && db) {
+      try {
+        const roomDocRef = doc(db, 'rooms', roomId);
+        await updateDoc(roomDocRef, {
+          codeModeOpen: open,
+          codeModeOpenedBy: uid,
+          codeModeOpenedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        return true;
+      } catch (err) {
+        setRoom(prev => prev ? { ...prev, codeModeOpen: room.codeModeOpen, codeModeOpenedBy: room.codeModeOpenedBy, codeModeOpenedAt: room.codeModeOpenedAt } : prev);
+        return false;
+      }
+    }
+    if (channelRef.current) {
+      channelRef.current.postMessage({
+        type: 'code_mode',
+        senderUid: uid,
+        data: { open, openedBy: uid, openedAt }
+      });
+    }
+    return true;
+  }, [roomId, room, uid, currentRole, useFirebase]);
+
   return {
     room,
     syncStatus,
@@ -1389,6 +1428,8 @@ export function useLiveRoom(roomId: string | null, userName: string) {
     workspaceType: room?.workspaceType || 'team',
     workspaceName: room?.workspaceName || room?.title || 'Workspace',
     roomCode: room?.roomCode || roomId,
-    workspaceStatus: room?.status || workspaceStatus || 'active'
+    workspaceStatus: room?.status || workspaceStatus || 'active',
+    codeModeOpen: room?.codeModeOpen === true,
+    setCodeModeOpen
   };
 }

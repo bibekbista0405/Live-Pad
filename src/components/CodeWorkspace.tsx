@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import './code/code-workspace.css';
 import { motion, AnimatePresence } from 'motion/react';
 import Editor, { OnMount } from '@monaco-editor/react';
 import JSZip from 'jszip';
@@ -160,7 +161,11 @@ interface CodeWorkspaceProps {
   onChangeCodeLanguage: (lang: string) => void;
   roomCode: string | null;
   userName: string;
-  userRole: 'teacher' | 'student' | any;
+  userRole: 'teacher' | 'student' | 'admin' | 'owner' | any;
+  isTeachingSession?: boolean;
+  canControlCodeMode?: boolean;
+  codeModeOpen?: boolean;
+  onRequestCodeMode?: () => void;
   activeUsers: any[];
   isReadOnly: boolean;
   onAddToast: (type: 'success' | 'error' | 'info', message: string) => void;
@@ -331,6 +336,10 @@ export default function CodeWorkspace({
   roomCode,
   userName,
   userRole,
+  isTeachingSession = false,
+  canControlCodeMode = false,
+  codeModeOpen = true,
+  onRequestCodeMode,
   activeUsers,
   isReadOnly,
   onAddToast,
@@ -1800,33 +1809,28 @@ export default function CodeWorkspace({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.1 }}
-        className="fixed inset-0 z-50 bg-[#1e1e1e] text-[#cccccc] flex flex-col h-screen w-screen overflow-hidden font-sans select-none"
+        className="livepad-code-shell fixed inset-0 z-50 flex flex-col h-screen w-screen overflow-hidden select-none"
       >
-        {/* Top Workspace Header Bar (VS Code Menu & Title Bar) */}
-        <header className="h-8 bg-[#323233] border-b border-[#252526] px-2 flex items-center justify-between shrink-0 z-30 text-xs">
+        {/* Top Workspace Header Bar (Code Studio title bar) */}
+        <header className="livepad-code-titlebar h-11 px-2 sm:px-3 flex items-center justify-between shrink-0 z-30 text-xs">
           {/* Left: Window controls & Menu Bar */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
               onClick={onClose}
-              className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-[#454545] text-[#cccccc] text-[11px] font-medium transition-colors cursor-pointer"
+              className="livepad-code-ghost-btn flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer"
               title="Return to Document Mode"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back</span>
+              <span className="hidden sm:inline">Back to workspace</span>
             </button>
 
-            <div className="h-3 w-px bg-[#454545]" />
+            <div className="h-5 w-px bg-white/10" />
 
-            <div className="hidden md:flex items-center gap-1 text-[11px] text-[#cccccc]">
-              <span className="px-2 py-0.5 hover:bg-[#454545] rounded cursor-pointer">File</span>
-              <span className="px-2 py-0.5 hover:bg-[#454545] rounded cursor-pointer">Edit</span>
-              <span className="px-2 py-0.5 hover:bg-[#454545] rounded cursor-pointer">Selection</span>
-              <span className="px-2 py-0.5 hover:bg-[#454545] rounded cursor-pointer">View</span>
-              <span className="px-2 py-0.5 hover:bg-[#454545] rounded cursor-pointer">Go</span>
-              <span className="px-2 py-0.5 hover:bg-[#454545] rounded cursor-pointer">Run</span>
-              <span className="px-2 py-0.5 hover:bg-[#454545] rounded cursor-pointer">Terminal</span>
-              <span className="px-2 py-0.5 hover:bg-[#454545] rounded cursor-pointer">Help</span>
+            <div className="hidden lg:flex items-center gap-2 text-[11px] text-white/45">
+              <span className="font-semibold tracking-wide text-white/85">LivePad Code Studio</span>
+              <span className="h-1 w-1 rounded-full bg-cyan-400/70" />
+              <span>{isTeachingSession ? (canControlCodeMode ? 'Teacher-led session' : 'Learning session') : 'Practice workspace'}</span>
             </div>
           </div>
 
@@ -1835,30 +1839,61 @@ export default function CodeWorkspace({
             <button
               type="button"
               onClick={() => setIsProjectModalOpen(true)}
-              className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#252526] hover:bg-[#3c3c3c] text-white border border-[#454545] text-[11px] font-medium cursor-pointer"
+              className="livepad-code-project-switch flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer min-w-0"
               title="Switch or create projects"
             >
-              <FolderCode className="w-3.5 h-3.5 text-[#007acc]" />
-              <span className="font-mono max-w-[160px] truncate">{activeProject.name} - VS Code</span>
+              <img src="/brand/livepad-icon-192.png" alt="" className="w-5 h-5 rounded-md shrink-0" />
+              <span className="hidden sm:inline text-white/50">Project</span>
+              <span className="font-medium max-w-[180px] truncate text-white">{activeProject.name}</span>
               <ChevronDown className="w-3 h-3 text-[#cccccc]" />
             </button>
           </div>
 
+          {/* Session context: keep the learning model visible without adding another control surface. */}
+          {isTeachingSession && (
+            <div className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-semibold ${
+                canControlCodeMode
+                  ? 'border-indigo-400/20 bg-indigo-400/10 text-indigo-200'
+                  : 'border-cyan-400/20 bg-cyan-400/10 text-cyan-200'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${canControlCodeMode ? 'bg-indigo-300' : 'bg-cyan-300'}`} />
+                {canControlCodeMode ? 'Teacher' : 'Student'} · {activeUsers.length} learning
+              </span>
+            </div>
+          )}
+
           {/* Right: Actions & Panel Controls */}
           <div className="flex items-center gap-1">
+            {isTeachingSession && canControlCodeMode && onRequestCodeMode && (
+              <button
+                type="button"
+                onClick={onRequestCodeMode}
+                className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${
+                  codeModeOpen
+                    ? 'border-cyan-400/20 bg-cyan-400/10 text-cyan-200'
+                    : 'border-white/10 bg-white/[0.03] text-white/60'
+                }`}
+                title={codeModeOpen ? 'Close Code Studio for students' : 'Open Code Studio for students'}
+              >
+                <Radio className={`w-3 h-3 ${codeModeOpen ? 'text-cyan-300' : 'text-white/40'}`} />
+                {codeModeOpen ? 'Classroom live' : 'Open for class'}
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleRunCode}
-              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-[#0e639c] hover:bg-[#1177bb] text-white text-[11px] font-medium transition-colors cursor-pointer"
+              className="livepad-code-run-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
             >
               <Play className="w-3 h-3 fill-current" />
-              <span>Run</span>
+              <span>{isTeachingSession ? 'Run & Check' : 'Run'}</span>
             </button>
 
             <button
               type="button"
               onClick={handleOpenExternalWindow}
-              className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#252526] hover:bg-[#3c3c3c] text-[#cccccc] border border-[#454545] text-[11px] transition-colors cursor-pointer"
+              className="livepad-code-icon-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
               title="Open Preview in New Tab"
             >
               <ExternalLink className="w-3 h-3" />
@@ -1869,7 +1904,7 @@ export default function CodeWorkspace({
             <button
               type="button"
               onClick={() => setIsSearchModalOpen(true)}
-              className="p-1 rounded hover:bg-[#454545] text-[#cccccc] transition-colors cursor-pointer"
+              className="livepad-code-icon-btn p-1.5 rounded-lg transition-colors cursor-pointer"
               title="Search (Ctrl+Shift+F)"
             >
               <Search className="w-3.5 h-3.5" />
@@ -1878,7 +1913,7 @@ export default function CodeWorkspace({
             <button
               type="button"
               onClick={() => setIsCommandPaletteOpen(true)}
-              className="p-1 rounded hover:bg-[#454545] text-[#cccccc] transition-colors cursor-pointer"
+              className="livepad-code-icon-btn p-1.5 rounded-lg transition-colors cursor-pointer"
               title="Command Palette (Ctrl+Shift+P)"
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -1887,9 +1922,9 @@ export default function CodeWorkspace({
             <button
               type="button"
               onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
-              className={`p-1 rounded transition-colors cursor-pointer ${
-                leftSidebarOpen ? 'bg-[#04395e] text-white' : 'hover:bg-[#454545] text-[#cccccc]'
-              }`}
+              className={`livepad-code-icon-btn p-1.5 rounded-lg transition-colors cursor-pointer ${
+                leftSidebarOpen ? 'is-active' : ''
+              }`} 
               title="Toggle Sidebar (Ctrl+B)"
             >
               <PanelLeft className="w-3.5 h-3.5" />
@@ -1898,8 +1933,8 @@ export default function CodeWorkspace({
             <button
               type="button"
               onClick={() => setIsTerminalOpen(!isTerminalOpen)}
-              className={`p-1 rounded transition-colors cursor-pointer ${
-                isTerminalOpen ? 'bg-[#04395e] text-white' : 'hover:bg-[#454545] text-[#cccccc]'
+              className={`livepad-code-icon-btn p-1.5 rounded-lg transition-colors cursor-pointer ${
+                isTerminalOpen ? 'is-active' : ''
               }`}
               title="Toggle Terminal (Ctrl+J)"
             >
@@ -1908,8 +1943,8 @@ export default function CodeWorkspace({
           </div>
         </header>
 
-        {/* Main Body Grid (VS Code Layout Structure) */}
-        <div className="flex-1 flex min-h-0 relative overflow-hidden">
+        {/* Main Body Grid (LivePad Code Studio layout) */}
+        <div className="livepad-code-body flex-1 flex min-h-0 relative overflow-hidden">
           {/* Activity Bar */}
           <ActivityBar
             activeTab={activityBarTab}
@@ -1922,6 +1957,7 @@ export default function CodeWorkspace({
             onToggleSidebar={() => setLeftSidebarOpen(!leftSidebarOpen)}
             onOpenProjects={() => setIsProjectModalOpen(true)}
             unreadChatCount={unreadChatCount}
+            learningRole={isTeachingSession ? (canControlCodeMode ? 'teacher' : 'student') : 'peer'}
           />
 
           {/* Sidebar */}
@@ -1932,8 +1968,14 @@ export default function CodeWorkspace({
                 animate={{ width: 280, opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
                 transition={{ duration: 0.1 }}
-                className="bg-[#252526] border-r border-[#1e1e1e] flex flex-col shrink-0 overflow-hidden"
+                className="livepad-code-sidebar border-r flex flex-col shrink-0 overflow-hidden"
               >
+                <div className="livepad-code-sidebar-header h-10 px-3 flex items-center justify-between shrink-0">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+                    {activityBarTab === 'explorer' ? 'Explorer' : activityBarTab.replace(/-/g, ' ')}
+                  </span>
+                  <span className="text-[10px] text-white/25">{isTeachingSession ? 'Learning' : 'Code'}</span>
+                </div>
                 {activityBarTab === 'chat' ? (
                   <ChatPanel
                     isOpen={true}
@@ -2164,7 +2206,7 @@ export default function CodeWorkspace({
                   display: 'grid',
                   gridTemplateColumns: isPreviewOpen && !isFullscreenPreview ? `${splitRatio}% 6px 1fr` : '1fr'
                 }}
-                className="flex-1 min-w-0 h-full relative overflow-hidden bg-[#1e1e1e]"
+                className="livepad-code-canvas flex-1 min-w-0 h-full relative overflow-hidden"
               >
                 {/* Editor Container */}
                 <div className="flex flex-col h-full min-w-0 relative overflow-hidden">
@@ -2204,11 +2246,27 @@ export default function CodeWorkspace({
                     onSelectFile={handleSelectFile}
                   />
 
+                  {/* Beginner-first learning strip. Advanced tools remain available in their panels,
+                      but the editor itself always tells a new learner what to do next. */}
+                  <div className="shrink-0 min-h-9 px-3 sm:px-4 flex items-center justify-between gap-3 border-b border-white/[0.05] bg-cyan-500/[0.025] text-[10px]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-5 h-5 rounded-md bg-cyan-400/10 border border-cyan-400/15 flex items-center justify-center shrink-0">
+                        <Code2 className="w-3 h-3 text-cyan-300" />
+                      </span>
+                      <span className="text-white/55 truncate">
+                        {isTeachingSession
+                          ? (canControlCodeMode ? 'Teach together: choose a file, explain the idea, then Run & Check.' : 'Learn together: change the code, then use Run & Check to see what happened.')
+                          : 'Start small: edit the code, run it, and learn from the result.'}
+                      </span>
+                    </div>
+                    <span className="hidden lg:inline text-white/25 shrink-0">{isTeachingSession ? 'Live session' : 'Practice'} · {codeLanguage.toUpperCase()}</span>
+                  </div>
+
                   {/* Monaco Code Editor Area (Supports Single or Split Editor View) */}
                   <div className="flex-1 min-h-0 relative flex overflow-hidden">
                     {activeFile ? (
                       isSplitView ? (
-                        <div className="w-full h-full flex divide-x divide-[#252526]">
+                        <div className="w-full h-full flex divide-x divide-white/10">
                           {/* Main Editor Pane */}
                           <div className="flex-1 h-full min-w-0 relative">
                             <MonacoEditorWrapper
@@ -2236,11 +2294,11 @@ export default function CodeWorkspace({
 
                           {/* Secondary Split Editor Pane */}
                           <div className="flex-1 h-full min-w-0 flex flex-col bg-[#1e1e1e]">
-                            <div className="h-7 bg-[#2d2d2d] border-b border-[#1e1e1e] flex items-center justify-between px-2 text-xs font-sans text-[#cccccc] shrink-0">
+                            <div className="livepad-code-splitbar h-8 border-b flex items-center justify-between px-2 text-xs shrink-0">
                               <select
                                 value={secondaryFileId || activeFile.id}
                                 onChange={(e) => setSecondaryFileId(e.target.value)}
-                                className="bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2 py-0.5 text-xs text-[#cccccc] focus:outline-none"
+                                className="livepad-code-select rounded-md px-2 py-1 text-xs focus:outline-none"
                               >
                                 {files.map((f) => (
                                   <option key={f.id} value={f.id}>
@@ -2248,7 +2306,7 @@ export default function CodeWorkspace({
                                   </option>
                                 ))}
                               </select>
-                              <span className="text-[10px] text-[#858585] font-mono">Side-by-Side Split View</span>
+                              <span className="text-[10px] text-white/35 font-medium">Split editor</span>
                             </div>
 
                             <div className="flex-1 min-h-0 relative">
@@ -2296,8 +2354,8 @@ export default function CodeWorkspace({
                         />
                       )
                     ) : (
-                      <div className="flex flex-col items-center justify-center h-full w-full text-[#858585] font-mono text-xs space-y-3">
-                        <Code2 className="w-12 h-12 text-[#454545] animate-pulse" />
+                      <div className="livepad-empty-editor flex flex-col items-center justify-center h-full w-full text-xs space-y-3">
+                        <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center"><Code2 className="w-6 h-6 opacity-40" /></div>
                         <p>No file open. Select or create a file from the Project Explorer.</p>
                       </div>
                     )}
@@ -2311,7 +2369,7 @@ export default function CodeWorkspace({
                       e.preventDefault();
                       handleStartDragging(e.clientX);
                     }}
-                    className={`w-1.5 bg-[#252526] border-x border-[#1e1e1e] hover:bg-[#007acc] cursor-col-resize z-20 flex items-center justify-center transition-colors ${
+                    className={`livepad-code-splitter w-1.5 cursor-col-resize z-20 flex items-center justify-center transition-colors ${
                       isDraggingSplitter ? 'bg-[#007acc]' : ''
                     }`}
                   >

@@ -840,3 +840,28 @@ input[type="range"]::-moz-range-thumb {
     min-height: 36px;
   }
 }
+
+
+/* Product landing surface: restrained depth and consistent interaction language. */
+.livepad-landing-shell {
+  scrollbar-gutter: stable;
+}
+.livepad-landing-nav {
+  min-height: 44px;
+}
+.livepad-landing-panel {
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.livepad-landing-panel:hover {
+  transform: translateY(-2px);
+  border-color: rgba(14, 165, 233, .28);
+  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.09);
+}
+.dark .livepad-landing-panel {
+  box-shadow: 0 22px 60px rgba(0, 0, 0, .22);
+}
+@media (prefers-reduced-motion: reduce) {
+  .livepad-landing-panel { transition: none; }
+  .livepad-landing-panel:hover { transform: none; }
+}

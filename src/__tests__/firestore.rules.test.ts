@@ -53,6 +53,15 @@ beforeAll(async () => {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'rooms/ROOM1'), room());
     await setDoc(doc(ctx.firestore(), 'rooms/PUBLIC1'), room({ roomCode: 'PUBLIC1', privacy: 'public', participants: { owner: { uid: 'owner', role: 'owner' } }, defaultRole: 'member' }));
+    await setDoc(doc(ctx.firestore(), 'rooms/TEACHING1'), room({
+      roomCode: 'TEACHING1',
+      workspaceType: 'teaching',
+      participants: {
+        owner: { uid: 'owner', role: 'owner' },
+        teacher: { uid: 'teacher', role: 'teacher' },
+        student: { uid: 'student', role: 'student' },
+      },
+    }));
     await setDoc(doc(ctx.firestore(), 'users/owner'), { name: 'Owner' });
     await setDoc(doc(ctx.firestore(), 'rooms/ROOM1/projects/p1'), { name: 'Project' });
   });
@@ -79,6 +88,25 @@ suite('Firestore security rules', () => {
     const ctx = testEnv.authenticatedContext('editor');
     await assertSucceeds(updateDoc(doc(ctx.firestore(), 'rooms/ROOM1'), { content: 'Updated', updatedAt: serverTimestamp() }));
     await assertFails(updateDoc(doc(ctx.firestore(), 'rooms/ROOM1'), { ownerId: 'editor', updatedAt: serverTimestamp() }));
+  });
+
+  it('lets a teacher control shared Code Studio but blocks students from doing so', async () => {
+    const teacher = testEnv.authenticatedContext('teacher');
+    const student = testEnv.authenticatedContext('student');
+
+    await assertSucceeds(updateDoc(doc(teacher.firestore(), 'rooms/TEACHING1'), {
+      codeModeOpen: true,
+      codeModeOpenedBy: 'teacher',
+      codeModeOpenedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+
+    await assertFails(updateDoc(doc(student.firestore(), 'rooms/TEACHING1'), {
+      codeModeOpen: false,
+      codeModeOpenedBy: 'student',
+      codeModeOpenedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
   });
 
   it('blocks member role escalation and cross-user presence changes', async () => {

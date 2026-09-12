@@ -1,0 +1,75 @@
+/* LivePad Code Studio — a calmer, denser developer workstation skin. */
+.livepad-code-shell {
+  --lp-bg: #0b0f14;
+  --lp-panel: #10161f;
+  --lp-panel-2: #0d131b;
+  --lp-border: rgba(148, 163, 184, 0.13);
+  --lp-border-strong: rgba(148, 163, 184, 0.20);
+  --lp-text: #e6edf5;
+  --lp-muted: #7f8da1;
+  --lp-accent: #22d3ee;
+  --lp-accent-strong: #06b6d4;
+  background: var(--lp-bg);
+  color: var(--lp-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.livepad-code-titlebar {
+  background: linear-gradient(180deg, #121a24 0%, #0e151e 100%);
+  border-bottom: 1px solid var(--lp-border);
+  box-shadow: 0 1px 0 rgba(255,255,255,.02);
+}
+.livepad-code-ghost-btn,
+.livepad-code-menu-btn,
+.livepad-code-icon-btn { color: #9aa8ba; }
+.livepad-code-ghost-btn:hover,
+.livepad-code-menu-btn:hover,
+.livepad-code-icon-btn:hover { background: rgba(255,255,255,.06); color: #f8fafc; }
+.livepad-code-icon-btn.is-active { background: rgba(34,211,238,.12); color: #67e8f9; }
+.livepad-code-project-switch { background: rgba(255,255,255,.035); border: 1px solid var(--lp-border); }
+.livepad-code-project-switch:hover { background: rgba(255,255,255,.065); border-color: var(--lp-border-strong); }
+.livepad-code-run-btn { background: #0891b2; color: white; box-shadow: 0 4px 14px rgba(8,145,178,.18); }
+.livepad-code-run-btn:hover { background: #06b6d4; }
+
+.livepad-code-body { background: #0a0f15; }
+.livepad-code-activity { background: #0a0f15; border-right: 1px solid var(--lp-border); }
+.livepad-code-activity-btn { color: #64748b; }
+.livepad-code-activity-btn:hover { color: #e2e8f0; background: rgba(255,255,255,.035); }
+.livepad-code-activity-btn.is-active { color: #f8fafc; background: rgba(255,255,255,.055); }
+.livepad-code-activity-indicator { background: var(--lp-accent); box-shadow: 0 0 12px rgba(34,211,238,.45); }
+.livepad-code-sidebar { width: 276px; background: var(--lp-panel); border-color: var(--lp-border); }
+.livepad-code-canvas { background: #0b1017; }
+.livepad-code-splitbar { background: #0e151e; border-color: var(--lp-border); }
+.livepad-code-select { background: #0a1017; color: #cbd5e1; border: 1px solid var(--lp-border-strong); }
+.livepad-code-select:focus { border-color: rgba(34,211,238,.45); }
+.livepad-code-splitter { background: #0c131c; border-left: 1px solid var(--lp-border); border-right: 1px solid var(--lp-border); }
+.livepad-code-splitter:hover { background: rgba(34,211,238,.55); }
+.livepad-empty-editor { color: var(--lp-muted); }
+
+.livepad-code-statusbar { background: #0e151e; color: #94a3b8; border-top: 1px solid var(--lp-border); }
+.livepad-code-status-item:hover { background: rgba(255,255,255,.06); color: #e2e8f0; }
+.livepad-code-status-item.is-active { background: rgba(34,211,238,.11); color: #67e8f9; }
+
+/* Make common editor chrome feel consistent even when child components use utility classes. */
+.livepad-code-shell input:focus-visible,
+.livepad-code-shell select:focus-visible,
+.livepad-code-shell button:focus-visible { outline: 2px solid rgba(34,211,238,.7); outline-offset: 1px; }
+
+@media (max-width: 900px) {
+  .livepad-code-sidebar { width: 248px; }
+}
+@media (max-width: 700px) {
+  .livepad-code-sidebar { width: min(78vw, 280px); }
+}
+
+.livepad-code-sidebar-header {
+  border-bottom: 1px solid var(--lp-border);
+  background: rgba(255,255,255,.015);
+}
+.livepad-code-tabs { background: #0e151e; border-color: var(--lp-border); }
+.livepad-code-tab { border-color: var(--lp-border); background: #101720; }
+.livepad-code-tab:hover { background: #151e29; color: #e2e8f0; }
+.livepad-code-tab.is-active { background: #0b1017; border-top: 2px solid var(--lp-accent); }
+.livepad-code-tab-indicator { background: var(--lp-accent); }
+.livepad-code-tab-action { color: #64748b; }
+.livepad-code-tab-action:hover { color: #f8fafc; background: rgba(255,255,255,.07); }

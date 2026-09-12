@@ -18,7 +18,8 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:rules": "node scripts/test-rules.mjs",
-    "check:architecture": "tsc --noEmit"
+    "check:architecture": "tsc --noEmit",
+    "build:analyze": "npm run build && node scripts/analyze-build.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

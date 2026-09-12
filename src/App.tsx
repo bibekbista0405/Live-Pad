@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } fro
 import type { FormEvent, MouseEvent } from 'react';
 import { Platform, Logger, SessionRestoreManager } from './platform';
 import { useDictationEngine } from './hooks/useDictationEngine';
-import { DictationToolbar } from './components/dictation/DictationToolbar';
-import { DictationPreview } from './components/dictation/DictationPreview';
+const DictationToolbar = lazy(() => import('./components/dictation/DictationToolbar').then(m => ({ default: m.DictationToolbar })));
+const DictationPreview = lazy(() => import('./components/dictation/DictationPreview').then(m => ({ default: m.DictationPreview })));
 import { 
   Plus, 
   ArrowRight, 
@@ -101,7 +101,6 @@ import { useLiveRoom } from './hooks/useLiveRoom';
 import { WorkspaceLibraryService, UserWorkspaceRef } from './services/workspaceLibraryService';
 import { Theme, ToastMessage, UserPresence, LocalNotepad, TrashedNotepad, SyncStatus, Attachment, WorkspaceType, WorkspaceRole, WorkspacePrivacy } from './types';
 import { generateRoomCode, normalizeRoomCode, validateRoomCodeFormat, WORKSPACE_TYPES } from './utils/workspace';
-import { AttachmentsPanel } from './components/AttachmentsPanel';
 import BackgroundParticles from './components/BackgroundParticles';
 import Logo from './components/Logo';
 import CollaborativeCursors from './components/CollaborativeCursors';
@@ -114,13 +113,14 @@ import SlashCommandMenu, { SLASH_COMMANDS, SlashCommand } from './components/Sla
 import ErrorBoundary from './components/ErrorBoundary';
 import { useWorkspaceLayout } from './hooks/useWorkspaceLayout';
 import WorkspaceStatusBar from './components/WorkspaceStatusBar';
-import BottomConsolePanel from './components/BottomConsolePanel';
-import { InspectorPanel } from './components/InspectorPanel';
-import { ChatPanel, FloatingChatTrigger } from './components/collaboration/ChatPanel';
+const BottomConsolePanel = lazy(() => import('./components/BottomConsolePanel'));
+const InspectorPanel = lazy(() => import('./components/InspectorPanel').then(m => ({ default: m.InspectorPanel })));
+const ChatPanel = lazy(() => import('./components/collaboration/ChatPanel').then(m => ({ default: m.ChatPanel })));
+const FloatingChatTrigger = lazy(() => import('./components/collaboration/ChatPanel').then(m => ({ default: m.FloatingChatTrigger })));
 import { exportToTxt, exportToPdf, exportToDocx, exportToHtml, exportToMarkdown, exportToEpub, printDocument, convertHtmlToMarkdown } from './utils/exporters';
 import { CODE_SNIPPETS, CodeSnippet } from './utils/snippets';
 import RichTextEditor from './components/RichTextEditor';
-import MarkdownPreviewPanel from './components/MarkdownPreviewPanel';
+const MarkdownPreviewPanel = lazy(() => import('./components/MarkdownPreviewPanel'));
 import { WorkspaceCategory, canPerformAction, GlobalSystemRole } from './utils/workspaceCategories';
 import { Editor } from '@tiptap/react';
 import { useDesktopApp } from './hooks/useDesktopApp';
@@ -5924,6 +5924,7 @@ console.warn("Verify your variables before deployment!");
 
                         {/* Professional AI Voice Dictation Engine Toolbar */}
                         {!isCodeMode && (
+                          <Suspense fallback={null}>
                           <DictationToolbar
                             dictationState={dictationState}
                             activeProviderId={activeProviderId}
@@ -5942,6 +5943,7 @@ console.warn("Verify your variables before deployment!");
                             onTriggerAICleanup={triggerDictationAICleanup}
                             confidenceScore={dictationLastResult?.confidence || 0.96}
                           />
+                          </Suspense>
                         )}
 
                         {/* Attach File Action Trigger */}
@@ -7318,6 +7320,7 @@ console.warn("Verify your variables before deployment!");
                                   transition={{ duration: 0.2 }}
                                   className="h-full min-h-[350px] lg:min-h-0 flex flex-col"
                                 >
+                                  <Suspense fallback={null}>
                                   <MarkdownPreviewPanel
                                     content={editorContent}
                                     onClose={() => setIsSplitPreviewOpen(false)}
@@ -7326,6 +7329,7 @@ console.warn("Verify your variables before deployment!");
                                     onToggleExpand={() => setIsSplitPreviewExpanded(!isSplitPreviewExpanded)}
                                     theme={theme}
                                   />
+                                  </Suspense>
                                 </motion.div>
                               )}
                             </AnimatePresence>
@@ -7459,6 +7463,7 @@ console.warn("Verify your variables before deployment!");
                   </div>
 
                   {/* Docked Bottom Console Panel */}
+                  <Suspense fallback={null}>
                   <BottomConsolePanel
                     height={layout.bottomHeight}
                     isOpen={layout.bottomOpen && !layout.isFocusMode}
@@ -7469,9 +7474,11 @@ console.warn("Verify your variables before deployment!");
                     wordCount={wordCount}
                     lineCount={lineCount}
                   />
+                  </Suspense>
                 </div>
 
                 {/* Modern Resizable Inspector Panel */}
+                <Suspense fallback={null}>
                 <InspectorPanel
                   isOpen={layout.rightOpen && !layout.isFocusMode}
                   onClose={() => layout.setRightOpen(false)}
@@ -7561,6 +7568,7 @@ console.warn("Verify your variables before deployment!");
                   onExportEpub={handleExportEpub}
                   isMobile={isMobile}
                 />
+                </Suspense>
 
               </div>
 
@@ -7615,6 +7623,7 @@ console.warn("Verify your variables before deployment!");
         {!isInactiveWorkspace && (
           <>
             {/* Real-Time Workspace Chat Panel Drawer */}
+            <Suspense fallback={null}>
             <ChatPanel
               isOpen={isFloatingChatOpen}
               onClose={() => setIsFloatingChatOpen(false)}
@@ -7633,9 +7642,11 @@ console.warn("Verify your variables before deployment!");
               onAddToast={addToast}
               onUnreadCountChange={(count) => setUnreadChatCount(count)}
             />
+            </Suspense>
 
             {/* Floating Chat Launcher Button (Bottom Right) */}
             {!isCodeMode && (
+              <Suspense fallback={null}>
               <FloatingChatTrigger
                 isOpen={isFloatingChatOpen}
                 onToggle={() => {
@@ -7645,6 +7656,7 @@ console.warn("Verify your variables before deployment!");
                 unreadCount={unreadChatCount}
                 activeUsersCount={activeUsers.length}
               />
+              </Suspense>
             )}
 
             {/* Universal Command Palette Overlay */}
@@ -8271,6 +8283,8 @@ console.warn("Verify your variables before deployment!");
         />
       </Suspense>
       {/* Live AI Dictation Stream Preview Overlay */}
+      {(dictationLiveTranscript || dictationInterimTranscript || dictationLastResult) && (
+      <Suspense fallback={null}>
       <DictationPreview
         liveTranscript={dictationLiveTranscript}
         interimTranscript={dictationInterimTranscript}
@@ -8286,6 +8300,8 @@ console.warn("Verify your variables before deployment!");
         }}
         onDismissDetectedLang={() => setDictationDetectedLangPrompt(null)}
       />
+      </Suspense>
+      )}
     </div>
   );
 }

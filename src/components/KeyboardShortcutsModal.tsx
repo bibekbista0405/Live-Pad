@@ -1,5 +1,6 @@
 import { X, Keyboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useModalA11y } from '../hooks/useModalA11y';
 
 interface KeyboardShortcutsModalProps {
   isOpen: boolean;
@@ -7,6 +8,8 @@ interface KeyboardShortcutsModalProps {
 }
 
 export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsModalProps) {
+  const modalRef = useModalA11y(isOpen, onClose);
+
   const shortcuts = [
     { keys: ['Ctrl', 'Shift', 'P'], desc: 'Open Universal Command Palette' },
     { keys: ['Ctrl', 'K'], desc: 'Quick Search & Command Palette' },
@@ -36,6 +39,10 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShor
 
           {/* Modal Container */}
           <motion.div
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="livepad-shortcuts-title"
             initial={{ scale: 0.95, opacity: 0, y: 15 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.97, opacity: 0, y: 10 }}
@@ -47,12 +54,13 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShor
                 <div className="p-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/20 dark:border-zinc-700/20 text-neutral-800 dark:text-neutral-200">
                   <Keyboard className="w-4 h-4" />
                 </div>
-                <h3 className="font-sans font-semibold text-lg text-neutral-955 dark:text-white">
+                <h3 id="livepad-shortcuts-title" className="font-sans font-semibold text-lg text-neutral-955 dark:text-white">
                   Shortcuts
                 </h3>
               </div>
               <button
                 id="close-shortcuts-btn"
+                aria-label="Close shortcuts"
                 type="button"
                 onClick={onClose}
                 className="p-1 rounded-full transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"

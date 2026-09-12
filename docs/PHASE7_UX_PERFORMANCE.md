@@ -1,6 +1,6 @@
 # Phase 7 — UX + Performance
 
-Status: **In progress — foundation hardening pass**
+Status: **In progress — accessibility + performance hardening pass**
 
 AI remains intentionally deferred and is not part of this phase.
 
@@ -26,3 +26,9 @@ AI remains intentionally deferred and is not part of this phase.
 - Render-cost audit of the largest React surfaces.
 - Bundle/lazy-loading audit and production build measurement.
 - Mobile layout and touch-target audit.
+
+## Modal accessibility hardening
+
+- Added a shared modal accessibility primitive for Escape-to-close, Tab/Shift+Tab focus trapping, and focus restoration.
+- Applied it to the Universal Command Palette, Keyboard Shortcuts dialog, and Create Workspace dialog.
+- Added dialog semantics and accessible labels without changing existing actions or workflows.

@@ -49,6 +49,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { LocalNotepad } from '../types';
+import { useModalA11y } from '../hooks/useModalA11y';
 
 export interface CommandItem {
   id: string;
@@ -164,6 +165,7 @@ export default function CommandPalette({
   });
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const modalRef = useModalA11y(isOpen, onClose);
   const listRef = useRef<HTMLDivElement>(null);
 
   // Focus input when modal opens
@@ -794,6 +796,10 @@ export default function CommandPalette({
 
         {/* Modal Window */}
         <motion.div
+          ref={modalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="livepad-command-palette-title"
           initial={{ opacity: 0, scale: 0.95, y: -10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: -10 }}
@@ -803,6 +809,7 @@ export default function CommandPalette({
         >
           {/* Top Search Input Bar */}
           <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-200/80 dark:border-zinc-800/80 bg-slate-50/50 dark:bg-zinc-900/50">
+            <span id="livepad-command-palette-title" className="sr-only">Command palette</span>
             <Search className="w-5 h-5 text-cyan-500 shrink-0" />
             <input
               ref={inputRef}

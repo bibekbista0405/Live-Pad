@@ -15,13 +15,7 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  // React 19's type definitions can be affected by mixed React type packages in
-  // host projects. Keep the runtime inheritance from React.Component while
-  // explicitly declaring the inherited members this boundary uses.
-  declare public props: Readonly<Props>;
-  declare public state: Readonly<State>;
-  declare public setState: (state: State | ((prevState: Readonly<State>, props: Readonly<Props>) => State)) => void;
-  public state: State = {
+  public state: Readonly<State> = {
     hasError: false,
     error: null,
     errorInfo: null,
@@ -33,7 +27,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[Code Workspace Error Boundary Caught]', error, errorInfo);
-    this.setState({ error, errorInfo });
+    this.setState((previous) => ({ ...previous, error, errorInfo }));
   }
 
   private handleReload = () => {

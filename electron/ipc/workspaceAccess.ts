@@ -8,33 +8,27 @@ function canonicalExistingPath(targetPath: string): string {
   return fs.realpathSync.native(path.resolve(targetPath));
 }
 
+function stripWindowsExtendedPrefix(value: string): string {
+  if (value.startsWith('\\\\?\\UNC\\')) return `\\\\${value.slice(8)}`;
+  if (value.startsWith('\\\\?\\')) return value.slice(4);
+  return value;
+}
+
 function normalizeForComparison(targetPath: string): string {
-  let normalized = path.normalize(path.resolve(targetPath));
+  if (process.platform !== 'win32') return path.posix.normalize(path.posix.resolve(targetPath));
 
-  if (process.platform === 'win32') {
-    // fs.realpathSync.native() can return extended-length Windows paths while
-    // path.resolve() returns normal drive-letter paths. Compare one canonical form.
-    if (normalized.startsWith("\\\\?\\UNC\\")) {
-      normalized = `\\\\${normalized.slice(8)}`;
-    } else if (normalized.startsWith("\\\\?\\")) {
-      normalized = normalized.slice(4);
-    }
-    normalized = normalized.toLowerCase();
-  }
-
-  return normalized;
+  const normalized = stripWindowsExtendedPrefix(path.win32.normalize(path.win32.resolve(targetPath)));
+  return normalized.toLowerCase();
 }
 
 function isWithinRoot(targetPath: string, rootPath: string): boolean {
   const target = normalizeForComparison(targetPath);
-  const root = normalizeForComparison(rootPath).replace(/[\\/]+$/, '');
-  const separator = process.platform === 'win32' ? '\\' : '/';
+  const root = normalizeForComparison(rootPath);
+  const relative = process.platform === 'win32'
+    ? path.win32.relative(root, target)
+    : path.posix.relative(root, target);
 
-  // Absolute-prefix containment is intentionally used after canonicalization.
-  // It handles the workspace root itself, nested children, Windows drive
-  // letters, and UNC/extended-length paths without relying on path.relative()
-  // receiving paths in exactly the same representation.
-  return target === root || target.startsWith(`${root}${separator}`);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
 export function authorizeWorkspaceRoot(webContents: WebContents, selectedPath: string): string {
@@ -63,35 +57,28 @@ export function assertWorkspacePath(webContentsId: number, targetPath: string, o
 
   const resolved = path.resolve(targetPath);
   const roots = authorizedRoots.get(webContentsId);
-  if (!roots || roots.size === 0) {
-    throw new Error('No authorized workspace. Open a project folder first.');
-  }
+  if (!roots || roots.size === 0) throw new Error('No authorized workspace. Open a project folder first.');
 
   const matchingRoot = [...roots].find((root) => isWithinRoot(resolved, root));
   if (!matchingRoot) throw new Error('Path is outside the authorized workspace');
 
   if (fs.existsSync(resolved)) {
     const canonical = canonicalExistingPath(resolved);
-    if (!isWithinRoot(canonical, matchingRoot)) {
-      throw new Error('Resolved path is outside the authorized workspace');
-    }
+    if (!isWithinRoot(canonical, matchingRoot)) throw new Error('Resolved path is outside the authorized workspace');
     return canonical;
   }
 
   if (!options.allowMissing) throw new Error(`Path does not exist: ${targetPath}`);
 
-  // For new files/directories, canonicalize the nearest existing ancestor so a
-  // symlinked parent cannot escape the authorized workspace.
   let ancestor = resolved;
   while (!fs.existsSync(ancestor)) {
     const parent = path.dirname(ancestor);
     if (parent === ancestor) throw new Error('Unable to validate path');
     ancestor = parent;
   }
+
   const canonicalAncestor = canonicalExistingPath(ancestor);
-  if (!isWithinRoot(canonicalAncestor, matchingRoot)) {
-    throw new Error('Path resolves outside the authorized workspace');
-  }
+  if (!isWithinRoot(canonicalAncestor, matchingRoot)) throw new Error('Path resolves outside the authorized workspace');
 
   return resolved;
 }

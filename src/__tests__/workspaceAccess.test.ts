@@ -49,7 +49,25 @@ describe('Electron workspace path authorization', () => {
     windows.add(id);
     authorizeWorkspaceRoot(fakeWebContents(id), root);
 
-    expect(assertWorkspacePath(id, path.join(root, 'new', 'file.txt'), { allowMissing: true })).toBe(path.join(root, 'new', 'file.txt'));
+    const child = path.join(root, 'new', 'file.txt');
+    expect(assertWorkspacePath(id, child, { allowMissing: true })).toBe(path.resolve(child));
     expect(() => assertWorkspacePath(id, path.join(root, '..', 'outside.txt'), { allowMissing: true })).toThrow(/outside the authorized workspace/);
+  });
+
+  it('rejects a symlink that escapes the authorized workspace', () => {
+    const root = tempWorkspace();
+    const outside = tempWorkspace();
+    const id = Math.floor(Math.random() * 1000000);
+    windows.add(id);
+    authorizeWorkspaceRoot(fakeWebContents(id), root);
+
+    const link = path.join(root, 'escape');
+    try {
+      fs.symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+    } catch {
+      return;
+    }
+
+    expect(() => assertWorkspacePath(id, path.join(link, 'file.txt'), { allowMissing: true })).toThrow(/outside the authorized workspace/);
   });
 });

@@ -387,3 +387,47 @@
 .livepad-code-project-readonly img{width:20px;height:20px;}
 .livepad-project-starter-files{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding-top:2px;color:#68798c;font-size:9px}
 .livepad-project-starter-files>span:not(:first-child){display:inline-flex;align-items:center;gap:5px;padding:5px 7px;border:1px solid rgba(148,163,184,.12);border-radius:6px;background:#111922;color:#aebdca}
+
+
+/* Pass 5: product chrome, real workspace panels, restrained developer UI. */
+.livepad-code-shell { --lp-border:rgba(148,163,184,.14); background:#0a1017 !important; color:#e8eef5; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+.livepad-code-titlebar { min-height:48px; background:#0d141c !important; border-bottom:1px solid var(--lp-border) !important; }
+.livepad-code-project-switch,.livepad-code-project-readonly { height:34px !important; background:#111a24 !important; border:1px solid rgba(148,163,184,.20) !important; border-radius:8px !important; box-shadow:none !important; }
+.livepad-code-project-switch:hover { background:#16212c !important; border-color:rgba(47,182,207,.3) !important; }
+.livepad-code-run-btn { min-height:34px !important; border-radius:8px !important; background:#1498b4 !important; border:1px solid rgba(89,211,232,.28) !important; box-shadow:none !important; }
+.livepad-code-run-btn:hover { background:#19a7c5 !important; }
+.livepad-code-icon-btn { width:32px; height:32px; display:grid; place-items:center; background:transparent !important; border:1px solid transparent !important; color:#8190a2 !important; }
+.livepad-code-icon-btn:hover,.livepad-code-icon-btn.is-active { background:#151f2a !important; border-color:var(--lp-border) !important; color:#e4ebf2 !important; }
+.livepad-code-activity { width:48px !important; background:#0b121a !important; border-right:1px solid var(--lp-border) !important; }
+.livepad-code-activity-btn { height:42px !important; color:#667589 !important; }
+.livepad-code-activity-btn:hover { color:#cbd6df !important; background:#111a24; }
+.livepad-code-activity-btn.is-active { color:#e7eef5 !important; background:#131e29 !important; }
+.livepad-code-activity-indicator { background:#2fb6cf !important; }
+.livepad-code-sidebar { width:300px !important; background:#0d151e !important; border-right:1px solid var(--lp-border) !important; }
+.livepad-code-sidebar-header { height:44px !important; background:#0f1821 !important; border-bottom:1px solid var(--lp-border); }
+.livepad-code-shell .livepad-code-splitter { background:#0a1017 !important; border-left:1px solid var(--lp-border); border-right:1px solid var(--lp-border); }
+.livepad-chat-panel { background:#0d151e !important; color:#dfe7ee !important; }
+.livepad-chat-header { min-height:52px; background:#101923 !important; border-bottom:1px solid var(--lp-border) !important; }
+.livepad-chat-icon { background:#15222d !important; border:1px solid var(--lp-border) !important; color:#86d8e7 !important; }
+.livepad-chat-messages { background:#0b1219 !important; }
+.livepad-chat-avatar { background:#17222d !important; border:1px solid var(--lp-border) !important; }
+.livepad-chat-bubble { border-radius:7px !important; background:#111a23 !important; border:1px solid rgba(148,163,184,.10) !important; }
+.livepad-chat-message.is-self .livepad-chat-bubble { background:#10242b !important; border-color:rgba(47,182,207,.18) !important; }
+.livepad-chat-tools { opacity:1 !important; }
+.livepad-chat-composer { background:#0f1821 !important; border-top:1px solid var(--lp-border) !important; }
+.livepad-chat-composer input { background:#0b1219 !important; border-color:rgba(148,163,184,.20) !important; border-radius:7px !important; }
+.livepad-chat-composer > button.send { background:#168fa8 !important; border-radius:7px !important; }
+.livepad-chat-error { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 10px; background:#2a1719; border-bottom:1px solid rgba(244,114,114,.18); color:#e6a0a0; font-size:9px; }
+.livepad-chat-error button { border:1px solid rgba(244,114,114,.25); background:#3a2022; color:#f1b0b0; border-radius:5px; padding:3px 7px; cursor:pointer; }
+.livepad-comments-panel { position:static !important; inset:auto !important; width:100% !important; height:100% !important; border-radius:0 !important; box-shadow:none !important; background:#0d151e !important; border:0 !important; }
+.livepad-comments-panel > div:first-child { background:#101923 !important; border-bottom:1px solid var(--lp-border) !important; }
+.livepad-comments-panel form { background:#0e171f !important; }
+.livepad-preview-panel { background:#0b1219 !important; border-left:1px solid var(--lp-border) !important; }
+.livepad-preview-toolbar { background:#101923 !important; border-bottom:1px solid var(--lp-border) !important; }
+.livepad-preview-stage { background:#0a1017 !important; }
+.livepad-preview-status { display:inline-flex; align-items:center; gap:5px; margin-right:4px; color:#75869a; font:10px/1 Inter,ui-sans-serif,sans-serif; }
+.livepad-preview-status > span { width:6px; height:6px; border-radius:50%; background:#4d8a68; }
+.livepad-preview-status.is-busy > span { background:#b58a3d; }
+.livepad-preview-status.is-error > span { background:#c85d5d; }
+.livepad-code-shell .animate-pulse,.livepad-code-shell .animate-bounce { animation:none !important; }
+.livepad-code-shell .bg-gradient-to-r { background-image:none !important; }

@@ -129,7 +129,7 @@ import {
 } from '../services/indexedDBService';
 import { ensureAuth, auth, db } from '../lib/firebase';
 import { Platform } from '../platform';
-import { collection, addDoc, deleteDoc, doc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, setDoc, updateDoc } from 'firebase/firestore';
 import {
   subscribeToWorkspaceProjects,
   subscribeToProjectStructure,
@@ -839,6 +839,7 @@ export default function CodeWorkspace({
 
   const initialActivityTab = getInitialLayoutSetting<ActivityBarTab>('activityBarTab', 'explorer');
   const allowedActivityTabs: ActivityBarTab[] = ['explorer', 'knowledge', 'run', 'testing', 'chat', 'comments', 'admin', 'trash'];
+  const canManageFiles = !isTeachingSession || canControlCodeMode;
   const [activityBarTab, setActivityBarTab] = useState<ActivityBarTab>(
     allowedActivityTabs.includes(initialActivityTab) ? initialActivityTab : 'explorer'
   );
@@ -963,7 +964,10 @@ export default function CodeWorkspace({
   const [isSplitView, setIsSplitView] = useState<boolean>(false);
   const [secondaryFileId, setSecondaryFileId] = useState<string | null>(null);
   const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState<boolean>(true);
-  const autoSaveDebounceRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const autoSaveDebounceRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const projectSaveDebounceRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const parentContentDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingEditorContentRef = useRef<Map<string, string>>(new Map());
 
   const handleReorderTabs = useCallback((draggedId: string, targetId: string) => {
     setOpenFileIds((prev) => {
@@ -1159,43 +1163,66 @@ export default function CodeWorkspace({
     setEditorTargetPosition({ line, column: col });
   }, [files]);
 
-  const handleEditorChange = (val: string, targetFileId?: string) => {
+  const handleEditorChange = useCallback((val: string, targetFileId?: string) => {
     const fileToUpdateId = targetFileId || activeFileId;
     if (!fileToUpdateId) return;
 
     const currentFile = files.find((f) => f.id === fileToUpdateId);
     if (!currentFile) return;
+    const updatedAt = Date.now();
+    pendingEditorContentRef.current.set(fileToUpdateId, val);
+
+    // Keep Monaco local and synchronous. Cloud persistence and the large parent App
+    // tree are intentionally debounced so fast typing never waits on React/Firestore.
+    setFiles((prev) => prev.map((f) => (f.id === fileToUpdateId
+      ? { ...f, content: val, updatedAt, isUnsaved: !isAutoSaveEnabled }
+      : f)));
 
     if (fileToUpdateId === activeFileId) {
-      onUpdateContent(val);
+      if (parentContentDebounceRef.current) clearTimeout(parentContentDebounceRef.current);
+      parentContentDebounceRef.current = setTimeout(() => {
+        parentContentDebounceRef.current = null;
+        onUpdateContent(val);
+      }, 140);
     }
 
-    setFiles((prev) =>
-      prev.map((f) => (f.id === fileToUpdateId ? { ...f, content: val, updatedAt: Date.now(), isUnsaved: !isAutoSaveEnabled } : f))
-    );
-
-    // Stream directly to PWA local computer disk if handle exists
     const handle = fileHandlesMapRef.current.get(fileToUpdateId);
-    if (handle) {
-      saveFileToLocalDisk(handle, val);
-    }
+    if (handle) void saveFileToLocalDisk(handle, val);
 
-    // Save to Firestore with debounced sync
-    saveProjectFileDoc(workspaceId, activeProjectId, { ...currentFile, content: val, updatedAt: Date.now(), isUnsaved: false });
+    const existingProjectTimer = projectSaveDebounceRef.current.get(fileToUpdateId);
+    if (existingProjectTimer) clearTimeout(existingProjectTimer);
+    const saveTimer = setTimeout(() => {
+      projectSaveDebounceRef.current.delete(fileToUpdateId);
+      const latestContent = pendingEditorContentRef.current.get(fileToUpdateId);
+      const latestFile = files.find((f) => f.id === fileToUpdateId);
+      if (!latestFile || latestContent === undefined) return;
+      void saveProjectFileDoc(workspaceId, activeProjectId, {
+        ...latestFile, content: latestContent, updatedAt: Date.now(), isUnsaved: false
+      });
+      pendingEditorContentRef.current.delete(fileToUpdateId);
+      setFiles((prev) => prev.map((f) => f.id === fileToUpdateId ? { ...f, isUnsaved: false } : f));
+    }, isAutoSaveEnabled ? 450 : 900);
+    projectSaveDebounceRef.current.set(fileToUpdateId, saveTimer);
 
-    // Handle AutoSave indicator clearing
     if (isAutoSaveEnabled) {
       const existingTimer = autoSaveDebounceRef.current.get(fileToUpdateId);
       if (existingTimer) clearTimeout(existingTimer);
-
       const newTimer = setTimeout(() => {
-        setFiles((prev) =>
-          prev.map((f) => (f.id === fileToUpdateId ? { ...f, isUnsaved: false } : f))
-        );
-      }, 1000);
+        setFiles((prev) => prev.map((f) => (f.id === fileToUpdateId ? { ...f, isUnsaved: false } : f)));
+      }, 700);
       autoSaveDebounceRef.current.set(fileToUpdateId, newTimer);
     }
-  };
+  }, [activeFileId, activeProjectId, files, isAutoSaveEnabled, onUpdateContent, workspaceId]);
+
+  useEffect(() => {
+    return () => {
+      if (parentContentDebounceRef.current) clearTimeout(parentContentDebounceRef.current);
+      autoSaveDebounceRef.current.forEach((timer) => clearTimeout(timer));
+      projectSaveDebounceRef.current.forEach((timer) => clearTimeout(timer));
+      autoSaveDebounceRef.current.clear();
+      projectSaveDebounceRef.current.clear();
+    };
+  }, []);
 
   // Tab Handlers
   const handleCloseTab = (fileId: string) => {
@@ -1234,6 +1261,7 @@ export default function CodeWorkspace({
 
   // Folder & File CRUD Operations
   const handleCreateInlineFolder = (parentId: string | null, name: string) => {
+    if (!canManageFiles) return;
     const parent = folders.find((f) => f.id === parentId);
     const path = parent ? `${parent.path}/${name}` : name;
 
@@ -1254,6 +1282,7 @@ export default function CodeWorkspace({
   };
 
   const handleCreateInlineFile = (parentId: string | null, name: string) => {
+    if (!canManageFiles) return;
     const parent = folders.find((f) => f.id === parentId);
     const path = parent ? `${parent.path}/${name}` : name;
     const ext = name.split('.').pop() || 'js';
@@ -1588,13 +1617,13 @@ export default function CodeWorkspace({
       } else if (ctrl && (e.key === 'P' || e.key === 'p')) {
         e.preventDefault();
         setIsQuickOpenOpen(true);
-      } else if (ctrl && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
+      } else if (canManageFiles && ctrl && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
         e.preventDefault();
         setInlineCreatingInFolder({ folderId: null, type: 'folder' });
-      } else if (ctrl && (e.key === 'N' || e.key === 'n')) {
+      } else if (canManageFiles && ctrl && (e.key === 'N' || e.key === 'n')) {
         e.preventDefault();
         setInlineCreatingInFolder({ folderId: null, type: 'file' });
-      } else if (e.key === 'F2' && selectedIds.length === 1) {
+      } else if (canManageFiles && e.key === 'F2' && selectedIds.length === 1) {
         e.preventDefault();
         const id = selectedIds[0];
         const file = files.find((f) => f.id === id);
@@ -1604,13 +1633,13 @@ export default function CodeWorkspace({
           const folder = folders.find((f) => f.id === id);
           if (folder) setInlineRenamingItem({ id, type: 'folder', currentName: folder.name });
         }
-      } else if (e.key === 'Delete' && selectedIds.length > 0) {
+      } else if (canManageFiles && e.key === 'Delete' && selectedIds.length > 0) {
         e.preventDefault();
         const fileIds = selectedIds.filter((id) => files.some((f) => f.id === id));
         if (fileIds.length > 0) handleDeleteItems(fileIds, 'file');
         const folderIds = selectedIds.filter((id) => folders.some((f) => f.id === id));
         if (folderIds.length > 0) handleDeleteItems(folderIds, 'folder');
-      } else if (ctrl && (e.key === 'D' || e.key === 'd') && selectedIds.length === 1) {
+      } else if (canManageFiles && ctrl && (e.key === 'D' || e.key === 'd') && selectedIds.length === 1) {
         e.preventDefault();
         const id = selectedIds[0];
         if (files.some((f) => f.id === id)) handleDuplicateItem(id, 'file');
@@ -1620,11 +1649,12 @@ export default function CodeWorkspace({
 
     window.addEventListener('keydown', handleGlobalShortcuts);
     return () => window.removeEventListener('keydown', handleGlobalShortcuts);
-  }, [selectedIds, files, folders]);
+  }, [selectedIds, files, folders, canManageFiles]);
 
   // Command Palette Options
   const commandOptions: CommandOption[] = [
     {
+      teacherOnly: true,
       id: 'cmd-new-file',
       category: 'File',
       label: 'New File',
@@ -1633,6 +1663,7 @@ export default function CodeWorkspace({
       action: () => setInlineCreatingInFolder({ folderId: null, type: 'file' })
     },
     {
+      teacherOnly: true,
       id: 'cmd-new-folder',
       category: 'File',
       label: 'New Folder',
@@ -1827,7 +1858,7 @@ export default function CodeWorkspace({
         className="livepad-code-shell fixed inset-0 z-50 flex flex-col h-screen w-screen overflow-hidden select-none" data-learning-role={isTeachingSession && !canControlCodeMode ? 'student' : 'teacher'}
       >
         {/* Top Workspace Header Bar (Code Studio title bar) */}
-        <header className="livepad-code-titlebar h-11 px-2 sm:px-3 flex items-center justify-between shrink-0 z-30 text-xs">
+        <header className="livepad-code-titlebar h-12 px-3 sm:px-4 flex items-center justify-between shrink-0 z-30 text-xs">
           {/* Left: Window controls & Menu Bar */}
           <div className="flex items-center gap-2 min-w-0">
             {(!isTeachingSession || canControlCodeMode) && (
@@ -1845,7 +1876,7 @@ export default function CodeWorkspace({
             <div className="h-5 w-px bg-white/10" />
 
             <div className="hidden lg:flex items-center gap-2 text-[11px] text-white/45">
-              <span className="font-semibold tracking-wide text-white/85">LivePad Code Studio</span>
+              <span className="font-semibold tracking-wide text-white/90">Code Studio</span>
               <span className="h-1 w-1 rounded-full bg-cyan-400/70" />
               <span>{isTeachingSession ? (canControlCodeMode ? 'Teacher-led session' : 'Learning session') : 'Practice workspace'}</span>
             </div>
@@ -2046,31 +2077,44 @@ export default function CodeWorkspace({
                         onAddToast('error', 'Set your real profile name before adding a comment.');
                         return;
                       }
+                      const threadId = `comment-${currentUserUid}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                      const thread = {
+                        ...newThread,
+                        authorUid: currentUserUid,
+                        authorName: currentUserName,
+                        authorRole: userRole,
+                        timestamp: Date.now(),
+                        status: 'open',
+                        replies: []
+                      };
+                      setCommentThreads((prev) => [{ id: threadId, ...thread }, ...prev]);
                       try {
-                        await addDoc(collection(db, 'rooms', roomCode, 'comments'), {
-                          ...newThread,
-                          authorUid: currentUserUid,
-                          authorName: currentUserName,
-                          authorRole: userRole,
-                          timestamp: Date.now(),
-                          status: 'open'
-                        });
+                        await setDoc(doc(db, 'rooms', roomCode, 'comments', threadId), thread);
                       } catch (error) {
+                        setCommentThreads((prev) => prev.filter((item) => item.id !== threadId));
                         console.warn('[LivePad Comments] Failed to create thread', error);
                         onAddToast('error', 'Comment could not be posted. Check your connection and permissions.');
                       }
                     }}
                     onAddReply={async (threadId, text) => {
                       if (!roomCode || !db || !currentUserUid || !currentUserName) return;
+                      const replyId = `reply-${currentUserUid}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                      const reply = {
+                        authorUid: currentUserUid,
+                        authorName: currentUserName,
+                        authorRole: userRole,
+                        text,
+                        timestamp: Date.now()
+                      };
+                      setCommentThreads((prev) => prev.map((item) => item.id === threadId
+                        ? { ...item, replies: [...(item.replies || []), { id: replyId, ...reply }] }
+                        : item));
                       try {
-                        await addDoc(collection(db, 'rooms', roomCode, 'comments', threadId, 'replies'), {
-                          authorUid: currentUserUid,
-                          authorName: currentUserName,
-                          authorRole: userRole,
-                          text,
-                          timestamp: Date.now()
-                        });
+                        await setDoc(doc(db, 'rooms', roomCode, 'comments', threadId, 'replies', replyId), reply);
                       } catch (error) {
+                        setCommentThreads((prev) => prev.map((item) => item.id === threadId
+                          ? { ...item, replies: (item.replies || []).filter((replyItem: any) => replyItem.id !== replyId) }
+                          : item));
                         console.warn('[LivePad Comments] Failed to create reply', error);
                         onAddToast('error', 'Reply could not be posted.');
                       }
@@ -2175,11 +2219,11 @@ export default function CodeWorkspace({
                         prev.map((f) => (f.id === fId ? { ...f, isExpanded: !f.isExpanded } : f))
                       )
                     }
-                    onContextMenu={handleContextMenuTrigger}
-                    onMoveItem={handleMoveItems}
+                    onContextMenu={canManageFiles ? handleContextMenuTrigger : ((e) => e.preventDefault())}
+                    onMoveItem={canManageFiles ? handleMoveItems : (() => {})}
                     onCreateInlineFile={handleCreateInlineFile}
                     onCreateInlineFolder={handleCreateInlineFolder}
-                    onRenameItem={handleRenameItem}
+                    onRenameItem={canManageFiles ? handleRenameItem : (() => {})}
                     inlineCreatingInFolder={inlineCreatingInFolder}
                     setInlineCreatingInFolder={setInlineCreatingInFolder}
                     inlineRenamingItem={inlineRenamingItem}
@@ -2188,9 +2232,10 @@ export default function CodeWorkspace({
                     syncError={syncError}
                     onRetrySync={handleRetrySync}
                     onDismissSyncError={() => setSyncError(null)}
-                    onOpenLocalFolder={handleOpenLocalFolder}
+                    onOpenLocalFolder={canManageFiles ? handleOpenLocalFolder : undefined}
                     isPwaMounted={isPwaMounted}
                     pwaPath={pwaPath}
+                    canManageFiles={canManageFiles}
                   />
                 )}
               </motion.aside>
@@ -2470,10 +2515,11 @@ export default function CodeWorkspace({
           isTerminalOpen={isTerminalOpen}
           onToggleTerminal={() => setIsTerminalOpen(!isTerminalOpen)}
           isSyncing={!!syncError}
+          showTerminal={canManageFiles}
         />
 
         {/* Global Modals & Context Menus */}
-        <FileContextMenu
+        {canManageFiles && <FileContextMenu
           state={contextMenu}
           onClose={() => setContextMenu(null)}
           onNewFile={(folderId) => setInlineCreatingInFolder({ folderId: folderId ?? null, type: 'file' })}
@@ -2612,7 +2658,7 @@ export default function CodeWorkspace({
             );
             onAddToast('info', `Renamed project.`);
           }}
-        />
+        />}
 
         <SearchFilesModal
           isOpen={isSearchModalOpen}

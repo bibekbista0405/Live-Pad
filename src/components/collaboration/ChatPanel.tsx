@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MessageSquare, Send, Search, X, Reply, Code2, Pencil, Trash2, Users, WifiOff } from 'lucide-react';
-import { collection, addDoc, doc, updateDoc, deleteDoc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { MessageSquare, Send, Search, X, Reply, Code2, Pencil, Trash2, Users, WifiOff, ThumbsUp, Lightbulb, PartyPopper } from 'lucide-react';
+import { collection, setDoc, doc, updateDoc, deleteDoc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { chatOutbox } from '../../sync/chatOutbox';
 import { UserPresence, WorkspaceRole } from '../../types';
@@ -29,13 +29,18 @@ interface ChatPanelProps {
   currentUid: string;
   userName: string;
   currentRole: WorkspaceRole;
+  theme?: string;
   isFloating?: boolean;
   onInsertCodeToEditor?: (code: string) => void;
   onAddToast?: (type: 'success' | 'error' | 'info', message: string) => void;
   onUnreadCountChange?: (count: number) => void;
 }
 
-const REACTIONS = ['👍', '💡', '🎉'];
+const REACTIONS = [
+  { key: 'like', label: 'Like', Icon: ThumbsUp },
+  { key: 'idea', label: 'Idea', Icon: Lightbulb },
+  { key: 'celebrate', label: 'Celebrate', Icon: PartyPopper }
+];
 
 function initials(name: string) {
   const clean = name.trim();
@@ -63,6 +68,8 @@ export function ChatPanel({
   const [snippet, setSnippet] = useState('');
   const [snippetLanguage, setSnippetLanguage] = useState('javascript');
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -79,18 +86,21 @@ export function ChatPanel({
   useEffect(() => {
     if (!roomId || !db || !currentUid) {
       setMessages([]);
+      setChatError(null);
       return;
     }
     const ref = collection(db, 'rooms', roomId, 'messages');
     const q = query(ref, orderBy('timestamp', 'asc'), limit(200));
     return onSnapshot(q, (snapshot) => {
       setMessages(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as ChatMessage)));
+      setChatError(null);
       setOnline(true);
     }, (error) => {
       console.warn('[LivePad Chat] realtime listener failed', error);
+      setChatError(error instanceof Error ? error.message : 'Chat connection failed.');
       setOnline(false);
     });
-  }, [roomId, currentUid]);
+  }, [roomId, currentUid, connectionAttempt]);
 
   // Flush messages that were intentionally queued while offline or while Firestore was unavailable.
   useEffect(() => {
@@ -101,7 +111,7 @@ export function ChatPanel({
       for (const item of pending) {
         if (cancelled) return;
         try {
-          await addDoc(collection(db, 'rooms', roomId, 'messages'), item.data);
+          await setDoc(doc(db, 'rooms', roomId, 'messages', item.clientKey), item.data);
           chatOutbox.remove(item.clientKey);
         } catch (error) {
           console.warn('[LivePad Chat] queued message flush failed', error);
@@ -152,13 +162,22 @@ export function ChatPanel({
       ...(replyTo ? { replyTo: { id: replyTo.id, senderName: replyTo.senderName, text: replyTo.text } } : {}),
       ...(cleanSnippet ? { codeSnippet: { language: snippetLanguage, code: cleanSnippet } } : {})
     };
+    const optimistic = { id: clientKey, ...payload } as ChatMessage;
+    setMessages((prev) => prev.some((item) => item.id === clientKey) ? prev : [...prev, optimistic]);
     try {
       if (!db || !online) throw new Error('offline');
-      await addDoc(collection(db, 'rooms', roomId, 'messages'), payload);
+      await setDoc(doc(db, 'rooms', roomId, 'messages', clientKey), payload);
       chatOutbox.remove(clientKey);
-    } catch {
-      chatOutbox.enqueue({ roomId, clientKey, data: payload, queuedAt: Date.now() });
-      onAddToast?.('info', 'Message saved locally and will sync when you reconnect.');
+      setChatError(null);
+    } catch (error) {
+      if (error instanceof Error && error.message !== 'offline') {
+        setMessages((prev) => prev.filter((item) => item.id !== clientKey));
+        setChatError(error.message || 'Message could not be sent.');
+        onAddToast?.('error', 'Message could not be sent. Check room access.');
+      } else {
+        chatOutbox.enqueue({ roomId, clientKey, data: payload, queuedAt: Date.now() });
+        onAddToast?.('info', 'Message saved locally and will sync when you reconnect.');
+      }
     }
     setText(''); setSnippet(''); setSnippetMode(false); setReplyTo(null);
     inputRef.current?.focus();
@@ -207,6 +226,7 @@ export function ChatPanel({
       </header>
 
       {!online && <div className="livepad-chat-offline"><WifiOff size={13} /> Messages will sync after reconnecting.</div>}
+      {chatError && <div className="livepad-chat-error"><span>{chatError}</span><button type="button" onClick={() => { setChatError(null); setOnline(true); setConnectionAttempt((value) => value + 1); }}>Retry</button></div>}
       {search !== '' && (
         <div className="livepad-chat-search"><Search size={13} /><input autoFocus value={search.trimStart()} onChange={(e) => setSearch(e.target.value)} placeholder="Search this chat" /><button onClick={() => setSearch('')}><X size={13} /></button></div>
       )}
@@ -239,7 +259,7 @@ export function ChatPanel({
                   {message.codeSnippet && <div className="livepad-chat-snippet"><div><Code2 size={12} /> {message.codeSnippet.language}</div><pre>{message.codeSnippet.code}</pre>{onInsertCodeToEditor && <button onClick={() => onInsertCodeToEditor(message.codeSnippet!.code)}>Insert into editor</button>}</div>}
                 </div>
                 <div className="livepad-chat-tools">
-                  {REACTIONS.map((emoji) => { const count = message.reactions?.[emoji]?.length || 0; return <button key={emoji} onClick={() => void toggleReaction(message, emoji)} className={message.reactions?.[emoji]?.includes(currentUid) ? 'active' : ''}>{emoji}{count ? ` ${count}` : ''}</button>; })}
+                  {REACTIONS.map(({ key, label, Icon }) => { const count = message.reactions?.[key]?.length || 0; return <button key={key} title={label} aria-label={label} onClick={() => void toggleReaction(message, key)} className={message.reactions?.[key]?.includes(currentUid) ? 'active' : ''}><Icon size={12} />{count ? ` ${count}` : ''}</button>; })}
                   <button onClick={() => setReplyTo(message)}><Reply size={12} /> Reply</button>
                   {self && <button onClick={() => { setEditingId(message.id); setEditingText(message.text); }}><Pencil size={12} /></button>}
                   {(self || ['owner', 'admin'].includes(String(currentRole))) && <button onClick={() => void removeMessage(message)}><Trash2 size={12} /></button>}

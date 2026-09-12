@@ -132,6 +132,7 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
   };
 
   const previewBuild = useMemo(() => buildVirtualProject(safeFiles, activeFile), [safeFiles, activeFile]);
+  const previewStatus = runtimeError ? 'Needs attention' : isRefreshing ? 'Updating' : 'Ready';
 
   useEffect(() => {
     if (previewBuild.errors.length > 0) {
@@ -251,9 +252,9 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
   const SelectedDeviceIcon = DEVICE_DIMENSIONS[devicePreset].icon;
 
   return (
-    <div className={`flex flex-col h-full w-full bg-slate-950/95 border-l border-slate-800 relative overflow-hidden select-none ${className}`}>
+    <div className={`livepad-preview-panel flex flex-col h-full w-full relative overflow-hidden select-none ${className}`}>
       {/* Top Preview Browser Toolbar */}
-      <div className="h-11 bg-slate-900 border-b border-slate-800/90 px-3 flex items-center justify-between shrink-0 gap-2 z-20">
+      <div className="livepad-preview-toolbar h-12 px-3 flex items-center justify-between shrink-0 gap-2 z-20">
         {/* Left Controls: Back, Forward, Refresh, Address Bar, Auto Reload */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <button
@@ -271,7 +272,7 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
           {/* Preview URL Bar */}
           <div className="flex-1 max-w-xs md:max-w-sm bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 flex items-center gap-2 text-xs text-slate-300 overflow-hidden">
             <Globe className="w-3 h-3 text-slate-500 shrink-0" />
-            <span className="truncate text-slate-300">Local preview · {activeFile?.name || 'index.html'}</span>
+            <span className="truncate text-slate-300">Preview · {activeFile?.name || 'index.html'}</span>
           </div>
 
           <button
@@ -350,8 +351,9 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
           </AnimatePresence>
         </div>
 
-        {/* Right Controls: Zoom, External Window, Copy, Fullscreen, Close */}
-        <div className="flex items-center gap-1">
+        {/* Right controls */}
+        <div className="flex items-center gap-1.5">
+          <span className={`livepad-preview-status ${runtimeError ? 'is-error' : isRefreshing ? 'is-busy' : ''}`}><span />{previewStatus}</span>
           {/* Zoom Controls */}
           <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700/60 text-slate-300 text-xs">
             <button
@@ -412,7 +414,7 @@ export default function CodePreviewPanel(props: CodePreviewPanelProps) {
       </div>
 
       {/* Main Device & Iframe Canvas Wrapper */}
-      <div className="flex-1 bg-slate-950 flex items-center justify-center p-4 overflow-auto relative no-scrollbar">
+      <div className="livepad-preview-stage flex-1 flex items-center justify-center p-4 overflow-auto relative no-scrollbar">
         <div
           className={`transition-all duration-300 relative flex flex-col ${
             devicePreset !== 'desktop'

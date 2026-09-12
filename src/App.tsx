@@ -2569,9 +2569,14 @@ export default function App() {
   // Firestore state is authoritative, so opening it from the teacher's device
   // automatically opens it for every participant.
   useEffect(() => {
-    if (!isTeachingSession || !roomCode) return;
-    setIsCodeMode(Boolean(codeModeOpen));
+    if (!roomCode) return;
+    if (isTeachingSession) setIsCodeMode(codeModeOpen === true);
   }, [isTeachingSession, roomCode, codeModeOpen, setIsCodeMode]);
+
+  useEffect(() => {
+    if (!isTeachingSession || !roomCode) return;
+    if (!codeModeOpen && isCodeMode) setIsCodeMode(false);
+  }, [isTeachingSession, roomCode, codeModeOpen, isCodeMode, setIsCodeMode]);
 
   const handleCodeModeToggle = useCallback(async () => {
     if (isTeachingSession) {
@@ -7547,7 +7552,7 @@ console.warn("Verify your variables before deployment!");
                   userColor={userColor}
                   onSaveNickname={saveNickname}
                   activeUsers={activeUsers}
-                  currentUid={auth?.currentUser?.uid || localStorage.getItem('livepad_local_uid') || ''}
+                  currentUid={uid}
                   roomCode={roomCode || undefined}
                   userRole="owner"
                   onNavigateToLine={(lineText) => {
@@ -7636,7 +7641,7 @@ console.warn("Verify your variables before deployment!");
               onClose={() => setIsFloatingChatOpen(false)}
               roomId={roomCode || 'private-pad'}
               activeUsers={activeUsers}
-              currentUid={auth?.currentUser?.uid || localStorage.getItem('livepad_local_uid') || ''}
+              currentUid={uid}
               userName={userName}
               currentRole={classroomRole === 'teacher' ? 'admin' : 'editor'}
               isFloating={true}

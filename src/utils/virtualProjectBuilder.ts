@@ -14,6 +14,17 @@ export interface BuildResult {
   warnings: string[];
 }
 
+// JSON is embedded inside <script> tags. Escape HTML-significant characters so
+// a student's literal </script> can never terminate the runtime script early.
+function serializeForInlineScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 /**
  * Analyzes workspace files and returns real-time compiler, linter, and language diagnostics
  */
@@ -268,7 +279,7 @@ export function buildVirtualProject(
 <body class="markdown-body">
   <div id="content"></div>
   <script>
-    const raw = ${JSON.stringify(currentFile?.content || '# Empty Markdown')};
+    const raw = ${serializeForInlineScript(currentFile?.content || '# Empty Markdown')};
     document.getElementById('content').innerHTML = typeof marked !== 'undefined' ? marked.parse(raw) : '<pre>' + raw + '</pre>';
   </script>
 </body>
@@ -316,7 +327,7 @@ export function buildVirtualProject(
         pyodide.setStdout({ write: (buf) => { logs.push(String.fromCharCode.apply(null, buf)); } });
         pyodide.setStderr({ write: (buf) => { logs.push('[ERROR] ' + String.fromCharCode.apply(null, buf)); } });
         
-        await pyodide.runPythonAsync(${JSON.stringify(pythonCode)});
+        await pyodide.runPythonAsync(${serializeForInlineScript(pythonCode)});
         status.textContent = '✔ Execution finished successfully.';
         output.textContent = logs.join('') || '(No output returned)';
       } catch (err) {
@@ -487,8 +498,13 @@ export function buildVirtualProject(
   }
 
   // --- 6. VIRTUAL MODULE LOADER & INJECTION SCRIPT ---
-  const virtualModulesJSON = JSON.stringify(compiledModulesMap);
-  const filePathsLookupJSON = JSON.stringify(
+  const needsVirtualModuleRuntime = jsTsFiles.some((f) =>
+    ['ts', 'tsx', 'jsx'].includes((f.extension || '').toLowerCase()) ||
+    /(^|\W)React(\W|$)|from\s+['"]react['"]/.test(f.content || '')
+  );
+
+  const virtualModulesJSON = serializeForInlineScript(compiledModulesMap);
+  const filePathsLookupJSON = serializeForInlineScript(
     safeFiles.map((f) => ({
       id: f.id,
       name: f.name,
@@ -671,25 +687,42 @@ export function buildVirtualProject(
 `;
 
   // Inject React and Babel CDN dependencies if React/JS/TS files exist
-  const hasReact = jsTsFiles.some((f) => f.content.includes('React') || f.content.includes('export default') || f.name.endsWith('.tsx') || f.name.endsWith('.jsx'));
-  const hasJsTs = jsTsFiles.length > 0;
+  const hasReact = needsVirtualModuleRuntime;
+  const hasJsTs = needsVirtualModuleRuntime;
 
   const reactCdnScript = `
     ${hasJsTs ? '<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.0/babel.min.js"></script>' : ''}
     ${hasReact ? '<script src="https://unpkg.com/react@18/umd/react.development.js"></script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>' : ''}
   `.trim();
 
+  const runtimeScript = needsVirtualModuleRuntime ? moduleSystemScript : `
+<script>
+(function(){
+  function notify(type,payload){ try { window.parent.postMessage({ source:'livepad-preview', type, payload }, '*'); } catch(e) {} }
+  ['log','info','warn','error'].forEach(function(level){
+    var original = console[level];
+    console[level] = function(){
+      var args = Array.prototype.slice.call(arguments);
+      original.apply(console,args);
+      var message = args.map(function(value){ try { return typeof value === 'object' ? JSON.stringify(value,null,2) : String(value); } catch(e){ return String(value); } }).join(' ');
+      notify('CONSOLE_LOG',{ level:level, message:message });
+    };
+  });
+  window.onerror = function(message,source,line,column,error){
+    notify('RUNTIME_ERROR',{ message:String(message), line:line, column:column, stack:error && error.stack ? error.stack : '' });
+    return false;
+  };
+  window.addEventListener('unhandledrejection',function(event){
+    notify('RUNTIME_ERROR',{ message:event.reason && event.reason.message ? event.reason.message : String(event.reason || 'Unhandled Promise Rejection') });
+  });
+})();
+</script>`;
+
   let finalHTML = baseHTML;
   if (finalHTML.includes('</head>')) {
-    finalHTML = finalHTML.replace('</head>', `${reactCdnScript}\n</head>`);
+    finalHTML = finalHTML.replace('</head>', `${reactCdnScript}\n${runtimeScript}\n</head>`);
   } else {
-    finalHTML = `${reactCdnScript}\n${finalHTML}`;
-  }
-
-  if (finalHTML.includes('</body>')) {
-    finalHTML = finalHTML.replace('</body>', `${moduleSystemScript}\n</body>`);
-  } else {
-    finalHTML += moduleSystemScript;
+    finalHTML = `${reactCdnScript}\n${runtimeScript}\n${finalHTML}`;
   }
 
   return {

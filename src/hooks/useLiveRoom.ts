@@ -380,6 +380,9 @@ export function useLiveRoom(roomId: string | null, userName: string) {
               attachments: roomData.attachments || [],
               status: roomData.status,
               permissions: roomData.permissions,
+              codeModeOpen: roomData.codeModeOpen,
+              codeModeOpenedBy: roomData.codeModeOpenedBy,
+              codeModeOpenedAt: roomData.codeModeOpenedAt,
             };
           });
         } else {
@@ -395,6 +398,9 @@ export function useLiveRoom(roomId: string | null, userName: string) {
               title: roomData.title,
               label: roomData.label,
               attachments: roomData.attachments || [],
+              codeModeOpen: roomData.codeModeOpen,
+              codeModeOpenedBy: roomData.codeModeOpenedBy,
+              codeModeOpenedAt: roomData.codeModeOpenedAt,
             } : roomData);
           } else {
             setRoom(roomData);
@@ -1382,6 +1388,7 @@ export function useLiveRoom(roomId: string | null, userName: string) {
         return true;
       } catch (err) {
         setRoom(prev => prev ? { ...prev, codeModeOpen: room.codeModeOpen, codeModeOpenedBy: room.codeModeOpenedBy, codeModeOpenedAt: room.codeModeOpenedAt } : prev);
+        channelRef.current?.postMessage({ type: 'code_mode', senderUid: uid, data: { open, openedBy: uid, openedAt } });
         return false;
       }
     }

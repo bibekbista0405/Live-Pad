@@ -52,6 +52,7 @@ interface FileExplorerTreeProps {
   onOpenLocalFolder?: () => void;
   isPwaMounted?: boolean;
   pwaPath?: string;
+  canManageFiles?: boolean;
 }
 
 export default function FileExplorerTree({
@@ -77,7 +78,8 @@ export default function FileExplorerTree({
   onDismissSyncError,
   onOpenLocalFolder,
   isPwaMounted = false,
-  pwaPath
+  pwaPath,
+  canManageFiles = true
 }: FileExplorerTreeProps) {
   const safeFolders = Array.isArray(folders) ? folders : [];
   const safeFiles = Array.isArray(files) ? files : [];
@@ -138,6 +140,7 @@ export default function FileExplorerTree({
   };
 
   const handleDropOnFolder = (e: React.DragEvent, targetFolderId: string | null) => {
+    if (!canManageFiles) return;
     e.preventDefault();
     e.stopPropagation();
     if (hoverExpandTimerRef.current) clearTimeout(hoverExpandTimerRef.current);
@@ -279,7 +282,7 @@ export default function FileExplorerTree({
                   )}
                 </div>
 
-                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                {canManageFiles && <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -306,7 +309,7 @@ export default function FileExplorerTree({
                   >
                     <FolderPlus className="w-3 h-3" />
                   </button>
-                </div>
+                </div>}
               </div>
 
               {/* Folder Inline Creator */}
@@ -413,7 +416,7 @@ export default function FileExplorerTree({
     <div
       onDragOver={(e) => handleDragOverFolder(e, null)}
       onDragLeave={handleDragLeaveFolder}
-      onDrop={(e) => handleDropOnFolder(e, null)}
+      onDrop={(e) => { if (canManageFiles) handleDropOnFolder(e, null); }}
       onContextMenu={(e) => onContextMenu(e, null, 'root')}
       className={`h-full overflow-y-auto p-2 space-y-2 select-none custom-scrollbar ${
         dragOverFolderId === null ? 'bg-cyan-500/5' : ''
@@ -423,7 +426,7 @@ export default function FileExplorerTree({
       <div className="flex items-center justify-between text-[10px] font-mono font-black uppercase text-slate-400 tracking-wider px-2 py-1">
         <span>Project Explorer</span>
         <div className="flex items-center gap-1">
-          {onOpenLocalFolder && (
+          {canManageFiles && onOpenLocalFolder && (
             <button
               type="button"
               onClick={onOpenLocalFolder}
@@ -438,7 +441,7 @@ export default function FileExplorerTree({
               <span>{isPwaMounted ? 'Local Disk' : 'Open Folder'}</span>
             </button>
           )}
-          <button
+          {canManageFiles && <button
             type="button"
             onClick={() => {
               setInlineCreatingInFolder({ folderId: null, type: 'file' });
@@ -448,8 +451,8 @@ export default function FileExplorerTree({
             title="New Root File"
           >
             <Plus className="w-3 h-3" />
-          </button>
-          <button
+          </button>}
+          {canManageFiles && <button
             type="button"
             onClick={() => {
               setInlineCreatingInFolder({ folderId: null, type: 'folder' });
@@ -459,7 +462,7 @@ export default function FileExplorerTree({
             title="New Root Folder"
           >
             <FolderPlus className="w-3 h-3" />
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -559,7 +562,7 @@ export default function FileExplorerTree({
       {/* Folder Tree Root */}
       {folders.length === 0 && files.length === 0 ? (
         <div className="p-6 text-center text-xs font-mono text-slate-500 border border-dashed border-slate-800 rounded-2xl">
-          Empty Project. Click + above to create a file or folder, or drag files here to upload.
+          Empty Project. A teacher can add files or folders from the Project Explorer.
         </div>
       ) : (
         renderFolderContent(null, 0)

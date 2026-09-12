@@ -357,16 +357,17 @@ function RichTextEditorComponent({
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     if (isReadOnly) return;
-    const files = Array.from(e.dataTransfer?.files || []).filter((file) =>
+    const files = Array.from(e.dataTransfer?.files || []) as File[];
+    const imageFiles = files.filter((file) =>
       file.type.startsWith('image/')
     );
 
-    if (files.length > 0) {
+    if (imageFiles.length > 0) {
       e.preventDefault();
       e.stopPropagation();
       setIsDraggingOver(false);
 
-      files.forEach((file) => {
+      imageFiles.forEach((file) => {
         const reader = new FileReader();
         reader.onload = (event) => {
           const base64Url = event.target?.result as string;
@@ -453,14 +454,14 @@ function RichTextEditorComponent({
       },
       handleDrop: (_view, event) => {
         if (isReadOnly) return false;
-        const files = Array.from(event.dataTransfer?.files || []).filter((file) =>
+        const imageFiles = (Array.from(event.dataTransfer?.files || []) as File[]).filter((file) =>
           file.type.startsWith('image/')
         );
-        if (files.length > 0) {
+        if (imageFiles.length > 0) {
           event.preventDefault();
           event.stopPropagation();
           setIsDraggingOver(false);
-          files.forEach((file) => {
+          imageFiles.forEach((file) => {
             const reader = new FileReader();
             reader.onload = (e) => {
               const base64Url = e.target?.result as string;

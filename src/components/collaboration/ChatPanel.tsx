@@ -318,7 +318,7 @@ export function ChatPanel({
       const now = Date.now();
       setTypingUsers((prev) => {
         let changed = false;
-        const next = { ...prev };
+        const next: Record<string, { name: string; lastTyped: number }> = { ...prev };
         Object.entries(next).forEach(([uid, info]) => {
           if (now - info.lastTyped > 3500) {
             delete next[uid];
@@ -899,7 +899,7 @@ export function ChatPanel({
     }
   };
 
-  const typingNames = Object.values(typingUsers).map((u) => u.name);
+  const typingNames = Object.values(typingUsers as Record<string, { name: string; lastTyped: number }>).map((u) => u.name);
 
   const renderSingleMessage = (msg: ChatMessage) => {
     const isSelf = msg.senderUid === currentUid;

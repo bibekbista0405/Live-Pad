@@ -1,3 +1,4 @@
+import type { RefObject } from 'react';
 import { VoiceCommandMatch } from '../types/dictation';
 
 export function parseVoiceCommand(text: string): VoiceCommandMatch | null {
@@ -83,7 +84,7 @@ export function parseVoiceCommand(text: string): VoiceCommandMatch | null {
 export function executeVoiceCommand(
   match: VoiceCommandMatch,
   editorInstance: any,
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>,
+  textareaRef: RefObject<HTMLTextAreaElement | null>,
   currentContent: string,
   onUpdateContent: (val: string) => void
 ): boolean {

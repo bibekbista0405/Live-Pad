@@ -15,7 +15,7 @@ export default defineConfig(() => {
         devOptions: {
           enabled: false,
         },
-        includeAssets: ['brand/livepad-icon-192.png', 'brand/livepad-icon-512.png', 'brand/livepad-favicon.ico', 'brand/livepad-lockup.png', 'brand/livepad-lockup.png', 'robots.txt'],
+        includeAssets: ['brand/livepad-icon-192.png', 'brand/livepad-icon-512.png', 'brand/livepad-favicon.ico', 'brand/livepad-lockup.png', 'robots.txt'],
         manifest: {
           name: 'LivePad - Real-Time Collaborative Workspace',
           short_name: 'LivePad',

@@ -132,3 +132,9 @@ See `docs/PHASE3_APPLICATION_STATE.md` for the current Phase 3 boundary and migr
 
 ### Phase 3 — Application/state + performance
 PWA support remains enabled. Its lifecycle is isolated in `src/hooks/usePWA.ts`. The application also uses memoized editor projections and coalesced local persistence to reduce typing lag without removing features.
+
+## Phase 3 status
+
+Phase 3 (Application & State Architecture) is complete at the compatibility boundary.
+The next roadmap stage is Phase 4 — Offline + Realtime Collaboration. No product capability
+was intentionally removed during the Phase 3 refactor; PWA remains enabled.

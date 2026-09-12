@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback, useMemo, FormEvent, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
+import type { FormEvent, MouseEvent } from 'react';
 import { Platform, Logger, SessionRestoreManager } from './platform';
 import { useDictationEngine } from './hooks/useDictationEngine';
 import { DictationToolbar } from './components/dictation/DictationToolbar';
@@ -766,26 +767,26 @@ export default function App() {
     };
   }, [auth?.currentUser?.uid]);
 
-  const handleTogglePinWorkspace = async (e: React.MouseEvent, wsId: string, currentPinned: boolean) => {
+  const handleTogglePinWorkspace = async (e: MouseEvent, wsId: string, currentPinned: boolean) => {
     e.stopPropagation();
     const currentUid = auth?.currentUser?.uid || localStorage.getItem('livepad_local_uid') || 'anonymous';
     await WorkspaceLibraryService.togglePin(currentUid, wsId, !currentPinned);
   };
 
-  const handleToggleFavoriteWorkspace = async (e: React.MouseEvent, wsId: string, currentFav: boolean) => {
+  const handleToggleFavoriteWorkspace = async (e: MouseEvent, wsId: string, currentFav: boolean) => {
     e.stopPropagation();
     const currentUid = auth?.currentUser?.uid || localStorage.getItem('livepad_local_uid') || 'anonymous';
     await WorkspaceLibraryService.toggleFavorite(currentUid, wsId, !currentFav);
   };
 
-  const handleRemoveWorkspaceFromNotes = async (e: React.MouseEvent, wsId: string) => {
+  const handleRemoveWorkspaceFromNotes = async (e: MouseEvent, wsId: string) => {
     e.stopPropagation();
     const currentUid = auth?.currentUser?.uid || localStorage.getItem('livepad_local_uid') || 'anonymous';
     await WorkspaceLibraryService.removeFromLibrary(currentUid, wsId);
     addToast('info', 'Workspace removed from your personal library & notes.');
   };
 
-  const handleDeleteWorkspacePermanently = async (e: React.MouseEvent, wsId: string) => {
+  const handleDeleteWorkspacePermanently = async (e: MouseEvent, wsId: string) => {
     e.stopPropagation();
     if (!window.confirm('Are you sure you want to permanently delete this online workspace? This action cannot be undone.')) {
       return;
@@ -4136,7 +4137,7 @@ console.warn("Verify your variables before deployment!");
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="flex-1 w-full h-full overflow-y-auto max-w-6xl mx-auto px-4 py-8 md:py-16 flex flex-col items-center justify-between z-10 no-scrollbar"
+            className="livepad-scroll-surface flex-1 w-full h-full overflow-y-auto max-w-6xl mx-auto px-4 py-8 md:py-16 flex flex-col items-center justify-between z-10 no-scrollbar"
           >
             {/* Upper Nav Header */}
             <div className="w-full flex items-center justify-between pointer-events-auto">

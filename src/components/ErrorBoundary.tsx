@@ -1,4 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Code2, RotateCcw, Download } from 'lucide-react';
 
 interface Props {
@@ -14,6 +15,12 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  // React 19's type definitions can be affected by mixed React type packages in
+  // host projects. Keep the runtime inheritance from React.Component while
+  // explicitly declaring the inherited members this boundary uses.
+  declare public props: Readonly<Props>;
+  declare public state: Readonly<State>;
+  declare public setState: (state: State | ((prevState: Readonly<State>, props: Readonly<Props>) => State)) => void;
   public state: State = {
     hasError: false,
     error: null,

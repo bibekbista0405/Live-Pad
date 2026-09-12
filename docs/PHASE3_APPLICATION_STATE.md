@@ -85,3 +85,17 @@ state ownership, render isolation, and persistence cost.
 - Document persistence no longer owns a delayed persistence state update through `setLocalNotes`; it uses a ref snapshot for the delayed browser-storage write.
 - PWA remains enabled; no PWA capability was removed.
 - Feature-preservation rule remains active: refactor/optimize first, remove nothing without an explicit product decision.
+
+
+## Phase 3 completion checkpoint
+
+The compatibility-boundary work is now complete. `useLiveRoom` remains the stable public
+facade used by the existing application, while its presence/participant projections and
+workspace membership mutations are owned by focused hooks. High-frequency cursor state is
+coalesced per animation frame to reduce root render pressure.
+
+The project now also has a root recovery boundary in `main.tsx`, so an unexpected render
+exception is contained by the existing recovery UI instead of blanking the entire process.
+
+This phase deliberately does not change the realtime protocol, Firestore migration strategy,
+or product capabilities. Those are Phase 4 concerns.

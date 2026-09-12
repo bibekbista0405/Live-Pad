@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import type { RefObject } from 'react';
 import { auth } from '../lib/firebase';
 import {
   DictationState,
@@ -15,7 +16,7 @@ import { useAudioAnalyzer } from './useAudioAnalyzer';
 
 export interface UseDictationEngineProps {
   editorInstance?: any;
-  textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
+  textareaRef?: RefObject<HTMLTextAreaElement | null>;
   editorContent: string;
   onUpdateContent: (content: string) => void;
   addToast?: (type: any, msg: string) => void;

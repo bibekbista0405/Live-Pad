@@ -4,8 +4,6 @@ import {
   onSnapshot, 
   setDoc, 
   updateDoc, 
-  deleteDoc,
-  deleteField,
   serverTimestamp,
   getDoc,
   collection,
@@ -16,12 +14,14 @@ import {
 } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { db, auth, isFirebaseConfigured, handleFirestoreError, OperationType, isFirestoreQuotaExhausted, markQuotaExhausted, onQuotaExhaustedChange } from '../lib/firebase';
-import { NoteRoom, UserPresence, UserStatus, SyncStatus, HistoryEntry, Attachment, WorkspaceType, WorkspaceRole, WorkspaceStatus, WorkspacePrivacy, WorkspaceParticipant } from '../types';
+import { NoteRoom, UserPresence, SyncStatus, HistoryEntry, Attachment, WorkspaceType, WorkspaceRole, WorkspaceStatus, WorkspacePrivacy, WorkspaceParticipant } from '../types';
 import { WORKSPACE_TYPES } from '../utils/workspace';
 import { notifyStorageError } from '../utils/offlineDB';
 import { merge3Text } from '../utils/textMerge';
 import { WorkspaceLibraryService } from '../services/workspaceLibraryService';
 import { getRecentWorkspaces } from '../utils/recentWorkspaces';
+import { useWorkspacePresence } from './useWorkspacePresence';
+import { useWorkspaceMembership } from './useWorkspaceMembership';
 
 const PASTEL_COLORS = [
   '#ef4444', // Red
@@ -90,7 +90,9 @@ export function useLiveRoom(roomId: string | null, userName: string) {
   const updateLockRef = useRef<boolean>(false);
   const myCursorIndexRef = useRef<number | undefined>(undefined);
   const mySelectionEndRef = useRef<number | undefined>(undefined);
-  const dbThrottleTimeoutRef = useRef<any>(null);
+  const dbThrottleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cursorFrameRef = useRef<number | null>(null);
+  const pendingCursorStateRef = useRef<Record<string, unknown> | null>(null);
   const lastSyncedContentRef = useRef<string>('');
   const isAwayRef = useRef<boolean>(false);
   const roomRef = useRef<NoteRoom | null>(room);
@@ -111,6 +113,7 @@ export function useLiveRoom(roomId: string | null, userName: string) {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       if (dbThrottleTimeoutRef.current) clearTimeout(dbThrottleTimeoutRef.current);
+      if (cursorFrameRef.current !== null) cancelAnimationFrame(cursorFrameRef.current);
     };
   }, [roomId]);
 
@@ -1195,23 +1198,21 @@ export function useLiveRoom(roomId: string | null, userName: string) {
       index = indexOrObj;
     }
 
-    // 1. Update local room state immediately so local components see it instantly
-    setRoom(prev => {
-      if (!prev) return null;
-      const currentUsers = { ...prev.users };
-      if (currentUsers[uid]) {
-        currentUsers[uid] = {
-          ...currentUsers[uid],
-          ...(index !== undefined && { cursorIndex: index }),
-          ...(selectionEnd !== undefined && { selectionEnd }),
-          ...(lineNumber !== undefined && { lineNumber }),
-          ...(columnNumber !== undefined && { columnNumber }),
-          ...(selectionEndLine !== undefined && { selectionEndLine }),
-          ...(selectionEndColumn !== undefined && { selectionEndColumn })
-        };
-      }
-      return { ...prev, users: currentUsers };
-    });
+    // 1. Keep cursor UI responsive without forcing a full App tree update for every
+    // editor cursor event. Coalesce bursts into one state update per animation frame.
+    pendingCursorStateRef.current = { cursorIndex: index, selectionEnd, lineNumber, columnNumber, selectionEndLine, selectionEndColumn };
+    if (cursorFrameRef.current === null) {
+      cursorFrameRef.current = requestAnimationFrame(() => {
+        cursorFrameRef.current = null;
+        const pending = pendingCursorStateRef.current;
+        pendingCursorStateRef.current = null;
+        if (!pending) return;
+        setRoom(prev => {
+          if (!prev || !prev.users?.[uid]) return prev;
+          return { ...prev, users: { ...prev.users, [uid]: { ...prev.users[uid], ...pending } } };
+        });
+      });
+    }
 
     // 2. Broadcast via BroadcastChannel immediately (instant peer-to-peer/offline coordination)
     if (channelRef.current) {
@@ -1263,235 +1264,25 @@ export function useLiveRoom(roomId: string | null, userName: string) {
     }
   }, [roomId, uid, useFirebase]);
 
-  // Expose active online user presences with rich status (Online, Away, Reconnecting, Offline)
-  const activeUsers = (Object.values(room?.users || {}) as UserPresence[])
-    .map(user => {
-      const timeDiff = Date.now() - (user.lastActive || 0);
-      let status: UserStatus = user.status || (user.isOnline ? 'online' : 'offline');
-      if (user.isOnline && timeDiff > 30000 && timeDiff <= 120000) {
-        status = 'away';
-      } else if (timeDiff > 120000 && user.uid !== uid) {
-        status = 'offline';
-      }
-      return {
-        ...user,
-        isOnline: status === 'online' || status === 'away',
-        status,
-        isTyping: !!(room?.typingUsers?.[user.uid])
-      };
-    })
-    .filter(u => u.isOnline || u.uid === uid)
-    .sort((a, b) => a.joinedAt - b.joinedAt);
-
-  const currentRole: WorkspaceRole = room 
+  // Focused Phase 3 responsibilities: presence, participants and membership mutations.
+  const { activeUsers, allParticipants } = useWorkspacePresence(room, uid);
+  const currentRole: WorkspaceRole = room
     ? (room.participants?.[uid]?.role || (room.creatorId === uid ? room.creatorRole : (WORKSPACE_TYPES[room.workspaceType || 'team']?.participantRole || 'member')))
     : 'member';
-
   const isCreator = room ? room.creatorId === uid : false;
   const isOwner = room ? (room.creatorId === uid || room.participants?.[uid]?.role === 'owner' || currentRole === 'owner') : false;
-
   const canEdit = useMemo(() => {
     if (!room) return true;
     if (room.status === 'archived' || room.status === 'expired' || room.status === 'deleted') return false;
-    return currentRole === 'owner' || currentRole === 'editor' || currentRole === 'collaborator' || currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'member';
+    return ['owner', 'editor', 'collaborator', 'teacher', 'admin', 'member'].includes(currentRole);
   }, [room, currentRole]);
-
   const canComment = useMemo(() => {
     if (!room) return true;
     if (room.status === 'archived' || room.status === 'expired' || room.status === 'deleted') return false;
-    return currentRole === 'owner' || currentRole === 'editor' || currentRole === 'commenter' || currentRole === 'collaborator' || currentRole === 'student' || currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'member';
+    return ['owner', 'editor', 'commenter', 'collaborator', 'student', 'teacher', 'admin', 'member'].includes(currentRole);
   }, [room, currentRole]);
-
-  // Archive workspace (Owner only)
-  const archiveWorkspace = useCallback(async () => {
-    if (!roomId) return;
-    if (useFirebase && db) {
-      const roomDocRef = doc(db, 'rooms', roomId);
-      await updateDoc(roomDocRef, {
-        status: 'archived',
-        archivedAt: serverTimestamp(),
-      });
-    } else {
-      localStorage.setItem(`livepad_room_status_${roomId}`, 'archived');
-      setRoom(prev => prev ? { ...prev, status: 'archived' } : null);
-    }
-  }, [roomId, useFirebase]);
-
-  // Restore workspace (Owner only)
-  const restoreWorkspace = useCallback(async () => {
-    if (!roomId) return;
-    if (useFirebase && db) {
-      const roomDocRef = doc(db, 'rooms', roomId);
-      await updateDoc(roomDocRef, {
-        status: 'active',
-        restoredAt: serverTimestamp(),
-      });
-    } else {
-      localStorage.setItem(`livepad_room_status_${roomId}`, 'active');
-      setRoom(prev => prev ? { ...prev, status: 'active' } : null);
-    }
-  }, [roomId, useFirebase]);
-
-  // Delete workspace permanently (Owner only)
-  const deleteWorkspace = useCallback(async () => {
-    if (!roomId) return;
-    if (useFirebase && db) {
-      const roomDocRef = doc(db, 'rooms', roomId);
-      await deleteDoc(roomDocRef);
-    }
-    // Clear local storage entries
-    localStorage.removeItem(`livepad_local_room_${roomId}`);
-    localStorage.removeItem(`livepad_local_room_title_${roomId}`);
-    localStorage.removeItem(`livepad_local_room_label_${roomId}`);
-    localStorage.removeItem(`livepad_local_room_attachments_${roomId}`);
-    localStorage.removeItem(`livepad_local_room_history_${roomId}`);
-    localStorage.removeItem(`livepad_room_status_${roomId}`);
-
-    try {
-      const recentsStr = localStorage.getItem('livepad_recent_workspaces');
-      if (recentsStr) {
-        const recents = JSON.parse(recentsStr);
-        const filtered = recents.filter((r: any) => r.code !== roomId && r.workspaceId !== roomId);
-        localStorage.setItem('livepad_recent_workspaces', JSON.stringify(filtered));
-      }
-    } catch (e) {
-      // ignore
-    }
-  }, [roomId, useFirebase]);
-
-  // Update a participant's role (Owner only)
-  const updateParticipantRole = useCallback(async (targetUid: string, newRole: WorkspaceRole) => {
-    if (!roomId) return;
-    if (useFirebase && db) {
-      const roomDocRef = doc(db, 'rooms', roomId);
-      await updateDoc(roomDocRef, {
-        [`participants.${targetUid}.role`]: newRole,
-        [`users.${targetUid}.role`]: newRole,
-      });
-    } else {
-      setRoom(prev => {
-        if (!prev) return null;
-        const nextParts = { ...prev.participants };
-        if (nextParts[targetUid]) {
-          nextParts[targetUid] = { ...nextParts[targetUid], role: newRole };
-        }
-        return { ...prev, participants: nextParts };
-      });
-    }
-  }, [roomId, useFirebase]);
-
-  // Remove a participant (Owner only)
-  const removeParticipant = useCallback(async (targetUid: string) => {
-    if (!roomId) return;
-    if (useFirebase && db) {
-      const roomDocRef = doc(db, 'rooms', roomId);
-      await updateDoc(roomDocRef, {
-        [`participants.${targetUid}`]: deleteField(),
-        [`users.${targetUid}`]: deleteField(),
-      });
-    } else {
-      setRoom(prev => {
-        if (!prev) return null;
-        const nextParts = { ...prev.participants };
-        delete nextParts[targetUid];
-        const nextUsers = { ...prev.users };
-        delete nextUsers[targetUid];
-        return { ...prev, participants: nextParts, users: nextUsers };
-      });
-    }
-  }, [roomId, useFirebase]);
-
-  // Transfer ownership to another user (Owner only)
-  const transferOwnership = useCallback(async (newOwnerUid: string) => {
-    if (!roomId || !uid) return;
-    if (useFirebase && db) {
-      const roomDocRef = doc(db, 'rooms', roomId);
-      await updateDoc(roomDocRef, {
-        ownerId: newOwnerUid,
-        creatorId: newOwnerUid,
-        creatorRole: 'owner',
-        [`participants.${newOwnerUid}.role`]: 'owner',
-        [`users.${newOwnerUid}.role`]: 'owner',
-        [`participants.${uid}.role`]: 'editor',
-        [`users.${uid}.role`]: 'editor',
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      setRoom(prev => {
-        if (!prev) return null;
-        const nextParts = { ...prev.participants };
-        if (nextParts[newOwnerUid]) nextParts[newOwnerUid] = { ...nextParts[newOwnerUid], role: 'owner' };
-        if (nextParts[uid]) nextParts[uid] = { ...nextParts[uid], role: 'editor' };
-        return {
-          ...prev,
-          creatorId: newOwnerUid,
-          creatorRole: 'owner',
-          participants: nextParts
-        };
-      });
-    }
-  }, [roomId, uid, useFirebase]);
-
-  // All participants list (Active and Offline with Last Seen timestamp)
-  const allParticipants = useMemo(() => {
-    if (!room) return [];
-    const map = new Map<string, WorkspaceParticipant & { isOnline: boolean; lastActive?: number }>();
-
-    if (room.participants) {
-      Object.entries(room.participants).forEach(([pUid, p]) => {
-        map.set(pUid, {
-          ...p,
-          isOnline: !!p.isOnline,
-          lastActive: p.lastActive || 0
-        });
-      });
-    }
-
-    if (room.users) {
-      Object.entries(room.users).forEach(([uUid, u]) => {
-        const existing = map.get(uUid);
-        const isOnline = !!u.isOnline && (Date.now() - (u.lastActive || 0) < 60000);
-        if (existing) {
-          map.set(uUid, {
-            ...existing,
-            name: u.name || existing.name,
-            color: u.color || existing.color,
-            isOnline,
-            lastActive: u.lastActive || existing.lastActive
-          });
-        } else {
-          map.set(uUid, {
-            uid: uUid,
-            name: u.name || 'Anonymous',
-            role: u.role || (uUid === room.creatorId ? 'owner' : 'editor'),
-            joinedAt: u.joinedAt || Date.now(),
-            color: u.color,
-            isOnline,
-            lastActive: u.lastActive
-          });
-        }
-      });
-    }
-
-    if (room.creatorId && !map.has(room.creatorId)) {
-      map.set(room.creatorId, {
-        uid: room.creatorId,
-        name: 'Workspace Owner',
-        role: 'owner',
-        joinedAt: room.createdAt || Date.now(),
-        isOnline: false,
-        lastActive: 0
-      });
-    }
-
-    return Array.from(map.values()).sort((a, b) => {
-      if (a.uid === room.creatorId) return -1;
-      if (b.uid === room.creatorId) return 1;
-      if (a.isOnline && !b.isOnline) return -1;
-      if (!a.isOnline && b.isOnline) return 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [room]);
+  const { archiveWorkspace, restoreWorkspace, deleteWorkspace, updateParticipantRole, removeParticipant, transferOwnership } =
+    useWorkspaceMembership({ roomId, uid, useFirebase, setRoom });
 
   return {
     room,

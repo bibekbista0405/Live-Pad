@@ -574,3 +574,61 @@ input[type="range"]::-moz-range-thumb {
 
 
 
+
+/* Phase 3 performance: keep decorative background animation off the React
+   frame loop.  These are compositor-friendly CSS transforms. */
+.livepad-bg-orb {
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  contain: layout paint;
+}
+
+.livepad-bg-orb-1 {
+  animation: livepad-bg-orb-1 25s ease-in-out infinite;
+}
+
+.livepad-bg-orb-2 {
+  animation: livepad-bg-orb-2 30s ease-in-out infinite;
+}
+
+.livepad-bg-orb-3 {
+  animation: livepad-bg-orb-3 35s ease-in-out infinite;
+}
+
+@keyframes livepad-bg-orb-1 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(80px, -100px, 0) scale(1.2); }
+  66% { transform: translate3d(-40px, 60px, 0) scale(.9); }
+}
+
+@keyframes livepad-bg-orb-2 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(-90px, 80px, 0) scale(.85); }
+  66% { transform: translate3d(50px, -70px, 0) scale(1.15); }
+}
+
+@keyframes livepad-bg-orb-3 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(120px, 100px, 0) scale(1.1); }
+  66% { transform: translate3d(-100px, -80px, 0) scale(.8); }
+}
+
+/* Scrolling should prioritize input/paint over decoration. */
+.livepad-background {
+  contain: strict;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .livepad-bg-orb-1,
+  .livepad-bg-orb-2,
+  .livepad-bg-orb-3 {
+    animation: none;
+  }
+}
+
+/* Avoid expensive smooth scrolling on very large editor/dashboard surfaces. */
+.livepad-scroll-surface {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+}

@@ -9,14 +9,32 @@ function canonicalExistingPath(targetPath: string): string {
 }
 
 function normalizeForComparison(targetPath: string): string {
-  const normalized = path.normalize(path.resolve(targetPath));
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+  let normalized = path.normalize(path.resolve(targetPath));
+
+  if (process.platform === 'win32') {
+    // fs.realpathSync.native() can return extended-length Windows paths while
+    // path.resolve() returns normal drive-letter paths. Compare one canonical form.
+    if (normalized.startsWith("\\\\?\\UNC\\")) {
+      normalized = `\\\\${normalized.slice(8)}`;
+    } else if (normalized.startsWith("\\\\?\\")) {
+      normalized = normalized.slice(4);
+    }
+    normalized = normalized.toLowerCase();
+  }
+
+  return normalized;
 }
 
 function isWithinRoot(targetPath: string, rootPath: string): boolean {
   const target = normalizeForComparison(targetPath);
-  const root = normalizeForComparison(rootPath);
-  return target === root || target.startsWith(`${root}${path.sep}`);
+  const root = normalizeForComparison(rootPath).replace(/[\\/]+$/, '');
+  const separator = process.platform === 'win32' ? '\\' : '/';
+
+  // Absolute-prefix containment is intentionally used after canonicalization.
+  // It handles the workspace root itself, nested children, Windows drive
+  // letters, and UNC/extended-length paths without relying on path.relative()
+  // receiving paths in exactly the same representation.
+  return target === root || target.startsWith(`${root}${separator}`);
 }
 
 export function authorizeWorkspaceRoot(webContents: WebContents, selectedPath: string): string {

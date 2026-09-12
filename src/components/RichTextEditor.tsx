@@ -71,6 +71,10 @@ const TIPTAP_EXTENSIONS = [
     heading: {
       levels: [1, 2, 3],
     },
+    // StarterKit in Tiptap 3 already bundles these extensions. Disable its copies
+    // because LivePad configures them explicitly below.
+    link: false,
+    underline: false,
   }),
   Underline,
   Highlight.configure({

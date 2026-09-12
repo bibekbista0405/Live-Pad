@@ -12,8 +12,8 @@ import {
   orderBy,
   limit
 } from 'firebase/firestore';
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { db, auth, isFirebaseConfigured, handleFirestoreError, OperationType, isFirestoreQuotaExhausted, markQuotaExhausted, onQuotaExhaustedChange } from '../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { db, auth, ensureAuth, isFirebaseConfigured, handleFirestoreError, OperationType, isFirestoreQuotaExhausted, markQuotaExhausted, onQuotaExhaustedChange } from '../lib/firebase';
 import { NoteRoom, UserPresence, SyncStatus, HistoryEntry, Attachment, WorkspaceType, WorkspaceRole, WorkspaceStatus, WorkspacePrivacy, WorkspaceParticipant } from '../types';
 import { WORKSPACE_TYPES } from '../utils/workspace';
 import { notifyStorageError } from '../utils/offlineDB';
@@ -209,50 +209,40 @@ export function useLiveRoom(roomId: string | null, userName: string) {
     setUserColor(savedColor);
   }, []);
 
-  // Initialize authentication (Firebase or local offline identity)
+  // Initialize authentication. Anonymous auth is optional; if the Firebase project
+  // does not enable it, switch once to the local/BroadcastChannel transport instead of
+  // repeatedly issuing failed signUp requests.
   useEffect(() => {
-    if (useFirebase && auth) {
-      const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        if (user) {
+    let cancelled = false;
+    if (!useFirebase || !auth) {
+      setUid(getLocalUid());
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (cancelled) return;
+      if (user) {
+        setUid(user.uid);
+        return;
+      }
+
+      // ensureAuth performs the single anonymous-auth attempt and returns null when
+      // the provider is disabled. The local transport remains fully usable.
+      void ensureAuth().then((user) => {
+        if (cancelled) return;
+        if (user?.uid) {
           setUid(user.uid);
         } else {
-          try {
-            const credential = await signInAnonymously(auth);
-            if (credential.user) {
-              setUid(credential.user.uid);
-            }
-          } catch (err: any) {
-            const errorMsg = err?.message || String(err);
-            if (errorMsg.includes('admin-restricted-operation') || errorMsg.includes('auth/admin-restricted-operation')) {
-              console.info(
-                "%cℹ️ Firebase Anonymous Auth is disabled for your project.\n" +
-                "To enable persistent multi-user web/mobile collaboration:\n" +
-                "1. Go to Firebase Console (https://console.firebase.google.com/)\n" +
-                "2. Click Build > Authentication > Sign-in method\n" +
-                "3. Enable the 'Anonymous' provider.\n" +
-                "Falling back smoothly to unauthenticated/local database synchronization.",
-                "color: #0ea5e9; font-weight: bold; font-size: 11px;"
-              );
-            } else {
-              console.warn("Auth Sign In failed; falling back to unauthenticated database connection:", err);
-            }
-            
-            // Fallback to local UID so operations can still proceed unauthenticated
-            setUid(getLocalUid());
-
-            // Check if network request failed. Gracefully fallback to Local/Offline Mode
-            if (errorMsg.includes('network-request-failed') || errorMsg.includes('auth/network-request-failed')) {
-              console.info("Firebase Auth network error detected. Switching LiveRoom instantly to Offline/Broadcast mode to prevent workspace lockup.");
-              setUseFirebase(false);
-            }
-          }
+          setUid(getLocalUid());
+          setUseFirebase(false);
         }
       });
-      return () => unsubscribe();
-    } else {
-      // Local offline identity fallback
-      setUid(getLocalUid());
-    }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [useFirebase]);
 
   const [refreshKey, setRefreshKey] = useState<number>(() => Date.now());

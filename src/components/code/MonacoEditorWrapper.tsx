@@ -602,6 +602,28 @@ function MonacoEditorWrapperComponent({
     }
   }, [allFiles]);
 
+  // Keep the editor model authoritative while typing. Monaco is intentionally
+  // uncontrolled here; feeding every keystroke back through React's `value` prop
+  // causes cursor jumps and visible lag during fast input/delete operations.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const model = editor.getModel?.();
+    if (!model) return;
+    if (model.getValue() === value) return;
+    const position = editor.getPosition?.();
+    const selection = editor.getSelection?.();
+    try {
+      model.pushEditOperations([], [{
+        range: model.getFullModelRange(),
+        text: value || ''
+      }], () => selection ? [selection] : null);
+      if (position) editor.setPosition(position);
+    } catch {
+      model.setValue(value || '');
+    }
+  }, [value]);
+
   // Jump to line and column when targetPosition changes
   useEffect(() => {
     if (targetPosition && editorRef.current) {
@@ -808,9 +830,9 @@ function MonacoEditorWrapperComponent({
     padding: { top: 12, bottom: 12 },
     tabSize: 2,
     renderWhitespace: 'selection' as const,
-    smoothScrolling: true,
-    cursorBlinking: 'smooth' as const,
-    cursorSmoothCaretAnimation: 'on' as const,
+    smoothScrolling: false,
+    cursorBlinking: 'blink' as const,
+    cursorSmoothCaretAnimation: 'off' as const,
     stickyScroll: { enabled: true },
     folding: true,
     foldingHighlight: true,
@@ -822,7 +844,7 @@ function MonacoEditorWrapperComponent({
     autoClosingQuotes: 'always' as const,
     autoIndent: 'full' as const,
     formatOnPaste: true,
-    formatOnType: true,
+    formatOnType: false,
     snippetSuggestions: 'top' as const,
     suggestOnTriggerCharacters: true,
     quickSuggestions: { other: true, comments: true, strings: true },
@@ -852,7 +874,7 @@ function MonacoEditorWrapperComponent({
           width="100%"
           language={getMonacoLanguage(language)}
           theme="vs-dark"
-          value={value}
+          defaultValue={value}
           onChange={(val) => {
             if (!isReadOnly) {
               onChange(val || '');

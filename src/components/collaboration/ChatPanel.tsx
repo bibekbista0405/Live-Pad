@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageSquare, Send, Search, X, Reply, Code2, Pencil, Trash2, Users, WifiOff, ThumbsUp, Lightbulb, PartyPopper } from 'lucide-react';
 import { collection, setDoc, doc, updateDoc, deleteDoc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { db, auth } from '../../lib/firebase';
 import { chatOutbox } from '../../sync/chatOutbox';
 import { UserPresence, WorkspaceRole } from '../../types';
 
@@ -74,6 +74,25 @@ export function ChatPanel({
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const didInitialScroll = useRef(false);
+  const localChannelRef = useRef<BroadcastChannel | null>(null);
+  const cloudChatEnabled = Boolean(db && auth?.currentUser?.uid === currentUid);
+  const localStorageKey = roomId ? `livepad_chat_${roomId}` : '';
+
+  const readLocalMessages = () => {
+    if (!localStorageKey) return [];
+    try {
+      const parsed = JSON.parse(localStorage.getItem(localStorageKey) || '[]');
+      return Array.isArray(parsed) ? parsed.slice(-200) as ChatMessage[] : [];
+    } catch { return []; }
+  };
+
+  const persistLocalMessage = (message: ChatMessage) => {
+    if (!localStorageKey) return;
+    try {
+      const next = [...readLocalMessages().filter((item) => item.id !== message.id), message].slice(-200);
+      localStorage.setItem(localStorageKey, JSON.stringify(next));
+    } catch {}
+  };
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -84,15 +103,50 @@ export function ChatPanel({
   }, []);
 
   useEffect(() => {
-    if (!roomId || !db || !currentUid) {
+    if (!roomId || !currentUid) {
       setMessages([]);
       setChatError(null);
       return;
     }
+
+    const mergeMessages = (incoming: ChatMessage[]) => {
+      setMessages((current) => {
+        const map = new Map(current.map((item) => [item.id, item]));
+        incoming.forEach((item) => map.set(item.id, item));
+        return [...map.values()].sort((a, b) => a.timestamp - b.timestamp).slice(-200);
+      });
+    };
+
+    if (!cloudChatEnabled) {
+      // Local/BroadcastChannel transport is intentional when Firebase Auth is not
+      // available. This keeps same-browser study rooms usable without pretending that
+      // unauthenticated clients can write to Firestore security rules.
+      mergeMessages(readLocalMessages());
+      if (typeof BroadcastChannel !== 'undefined') {
+        const channel = new BroadcastChannel(`livepad-chat:${roomId}`);
+        localChannelRef.current = channel;
+        channel.onmessage = (event) => {
+          if (event.data?.type === 'chat-delete' && event.data.id) {
+            const id = String(event.data.id);
+            try { localStorage.setItem(localStorageKey, JSON.stringify(readLocalMessages().filter((item) => item.id !== id))); } catch {}
+            setMessages((current) => current.filter((item) => item.id !== id));
+            return;
+          }
+          if (event.data?.type === 'chat-message' && event.data.message) {
+            const message = event.data.message as ChatMessage;
+            persistLocalMessage(message);
+            mergeMessages([message]);
+          }
+        };
+        return () => { channel.close(); localChannelRef.current = null; };
+      }
+      return;
+    }
+
     const ref = collection(db, 'rooms', roomId, 'messages');
     const q = query(ref, orderBy('timestamp', 'asc'), limit(200));
     return onSnapshot(q, (snapshot) => {
-      setMessages(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as ChatMessage)));
+      mergeMessages(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as ChatMessage)));
       setChatError(null);
       setOnline(true);
     }, (error) => {
@@ -100,11 +154,11 @@ export function ChatPanel({
       setChatError(error instanceof Error ? error.message : 'Chat connection failed.');
       setOnline(false);
     });
-  }, [roomId, currentUid, connectionAttempt]);
+  }, [roomId, currentUid, connectionAttempt, cloudChatEnabled]);
 
   // Flush messages that were intentionally queued while offline or while Firestore was unavailable.
   useEffect(() => {
-    if (!roomId || !db || !currentUid || !online) return;
+    if (!roomId || !cloudChatEnabled || !online) return;
     let cancelled = false;
     const flush = async () => {
       const pending = chatOutbox.list(roomId);
@@ -121,7 +175,7 @@ export function ChatPanel({
     };
     void flush();
     return () => { cancelled = true; };
-  }, [roomId, currentUid, online]);
+  }, [roomId, currentUid, online, cloudChatEnabled]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -165,10 +219,17 @@ export function ChatPanel({
     const optimistic = { id: clientKey, ...payload } as ChatMessage;
     setMessages((prev) => prev.some((item) => item.id === clientKey) ? prev : [...prev, optimistic]);
     try {
-      if (!db || !online) throw new Error('offline');
-      await setDoc(doc(db, 'rooms', roomId, 'messages', clientKey), payload);
-      chatOutbox.remove(clientKey);
-      setChatError(null);
+      if (!cloudChatEnabled) {
+        persistLocalMessage(optimistic);
+        localChannelRef.current?.postMessage({ type: 'chat-message', message: optimistic });
+        setChatError(null);
+      } else if (!online) {
+        throw new Error('offline');
+      } else {
+        await setDoc(doc(db, 'rooms', roomId, 'messages', clientKey), payload);
+        chatOutbox.remove(clientKey);
+        setChatError(null);
+      }
     } catch (error) {
       if (error instanceof Error && error.message !== 'offline') {
         setMessages((prev) => prev.filter((item) => item.id !== clientKey));
@@ -185,7 +246,13 @@ export function ChatPanel({
 
   const saveEdit = async (message: ChatMessage) => {
     const clean = editingText.trim();
-    if (!db || !roomId || !clean || message.senderUid !== currentUid) return;
+    if (!roomId || !clean || message.senderUid !== currentUid) return;
+    if (!cloudChatEnabled) {
+      const updated = { ...message, text: clean, isEdited: true, editedAt: Date.now() };
+      persistLocalMessage(updated); setMessages((prev) => prev.map((item) => item.id === message.id ? updated : item));
+      localChannelRef.current?.postMessage({ type: 'chat-message', message: updated });
+      setEditingId(null); setEditingText(''); return;
+    }
     try {
       await updateDoc(doc(db, 'rooms', roomId, 'messages', message.id), { text: clean, isEdited: true, editedAt: Date.now() });
       setEditingId(null); setEditingText('');
@@ -193,7 +260,15 @@ export function ChatPanel({
   };
 
   const toggleReaction = async (message: ChatMessage, emoji: string) => {
-    if (!db || !roomId || !currentUid) return;
+    if (!roomId || !currentUid) return;
+    if (!cloudChatEnabled) {
+      const current = message.reactions || {};
+      const users = current[emoji] || [];
+      const nextUsers = users.includes(currentUid) ? users.filter((uid) => uid !== currentUid) : [...users, currentUid];
+      const updated = { ...message, reactions: { ...current, [emoji]: nextUsers } };
+      persistLocalMessage(updated); setMessages((prev) => prev.map((item) => item.id === message.id ? updated : item));
+      localChannelRef.current?.postMessage({ type: 'chat-message', message: updated }); return;
+    }
     const current = message.reactions || {};
     const users = current[emoji] || [];
     const nextUsers = users.includes(currentUid) ? users.filter((uid) => uid !== currentUid) : [...users, currentUid];
@@ -202,7 +277,12 @@ export function ChatPanel({
   };
 
   const removeMessage = async (message: ChatMessage) => {
-    if (!db || !roomId || (message.senderUid !== currentUid && !['owner', 'admin'].includes(String(currentRole)))) return;
+    if (!roomId || (message.senderUid !== currentUid && !['owner', 'admin'].includes(String(currentRole)))) return;
+    if (!cloudChatEnabled) {
+      try { localStorage.setItem(localStorageKey, JSON.stringify(readLocalMessages().filter((item) => item.id !== message.id))); } catch {}
+      setMessages((prev) => prev.filter((item) => item.id !== message.id));
+      localChannelRef.current?.postMessage({ type: 'chat-delete', id: message.id }); return;
+    }
     try { await deleteDoc(doc(db, 'rooms', roomId, 'messages', message.id)); }
     catch { onAddToast?.('error', 'Message could not be deleted.'); }
   };
@@ -216,7 +296,7 @@ export function ChatPanel({
           <div className="livepad-chat-icon"><MessageSquare size={16} /></div>
           <div className="min-w-0">
             <h2>Workspace chat</h2>
-            <p>{activeUsers.length || 1} participant{(activeUsers.length || 1) !== 1 ? 's' : ''} · {online ? 'Live' : 'Offline'}</p>
+            <p>{activeUsers.length || 1} participant{(activeUsers.length || 1) !== 1 ? 's' : ''} · {cloudChatEnabled ? (online ? 'Live' : 'Offline') : 'Local room'}</p>
           </div>
         </div>
         <div className="livepad-chat-header-actions">

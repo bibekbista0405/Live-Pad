@@ -346,7 +346,10 @@ export default function CodeWorkspace({
   const [commentContext, setCommentContext] = useState<{ lineNumber?: number; selectedText?: string }>({});
   const commentReplyUnsubsRef = useRef<Map<string, () => void>>(new Map());
   const [resolvedUserUid, setResolvedUserUid] = useState(auth?.currentUser?.uid || '');
-  const currentUserUid = resolvedUserUid;
+  const currentUserUid = auth?.currentUser?.uid || resolvedUserUid || (typeof window !== 'undefined' ? localStorage.getItem('livepad_local_uid') || '' : '');
+  const cloudCollaborationEnabled = Boolean(db && auth?.currentUser?.uid === currentUserUid);
+  const localCommentsChannelRef = useRef<BroadcastChannel | null>(null);
+  const localCommentsKey = roomCode ? `livepad_comments_${roomCode}` : '';
   const currentUserName = userName?.trim() || auth?.currentUser?.displayName || auth?.currentUser?.email?.split('@')[0] || '';
 
   useEffect(() => {
@@ -357,34 +360,59 @@ export default function CodeWorkspace({
     return () => { cancelled = true; };
   }, []);
 
-  // Code comments are workspace collaboration data, not local component state.
-  // Subscribe to the room and each thread's replies so every participant sees updates live.
+  // Code comments are collaborative data. Use Firestore when authenticated; when the
+  // Firebase project has Anonymous Auth disabled, use a clearly local/BroadcastChannel
+  // transport rather than issuing permission-denied writes with a fabricated UID.
   useEffect(() => {
-    if (!roomCode || !db || !currentUserUid) {
+    if (!roomCode || !currentUserUid) {
       setCommentThreads([]);
+      return;
+    }
+
+    const mergeLocalComments = (incoming: any[]) => {
+      setCommentThreads((current) => {
+        const map = new Map(current.map((item) => [item.id, item]));
+        incoming.forEach((item) => map.set(item.id, item));
+        return [...map.values()].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
+      });
+    };
+
+    const readLocal = () => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(localCommentsKey) || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+      } catch { return []; }
+    };
+
+    if (!cloudCollaborationEnabled) {
+      mergeLocalComments(readLocal());
+      if (typeof BroadcastChannel !== 'undefined') {
+        const channel = new BroadcastChannel(`livepad-comments:${roomCode}`);
+        localCommentsChannelRef.current = channel;
+        channel.onmessage = (event) => {
+          if (event.data?.type === 'comment-delete') {
+            setCommentThreads((current) => current.filter((item) => item.id !== event.data.id));
+            return;
+          }
+          if (event.data?.type === 'comment-update' && event.data.thread) {
+            mergeLocalComments([event.data.thread]);
+          }
+        };
+        return () => { channel.close(); localCommentsChannelRef.current = null; };
+      }
       return;
     }
 
     const commentsRef = collection(db, 'rooms', roomCode, 'comments');
     const commentsQuery = query(commentsRef, orderBy('timestamp', 'desc'), limit(100));
     const unsubscribeReplies = commentReplyUnsubsRef.current;
-
     const unsubscribeComments = onSnapshot(commentsQuery, (snapshot) => {
-      const nextThreads = snapshot.docs.map((snapshotDoc) => ({
-        id: snapshotDoc.id,
-        ...snapshotDoc.data(),
-        replies: []
-      }));
+      const nextThreads = snapshot.docs.map((snapshotDoc) => ({ id: snapshotDoc.id, ...snapshotDoc.data(), replies: [] }));
       setCommentThreads(nextThreads);
-
       const liveIds = new Set(nextThreads.map((thread) => thread.id));
       unsubscribeReplies.forEach((unsubscribe, threadId) => {
-        if (!liveIds.has(threadId)) {
-          unsubscribe();
-          unsubscribeReplies.delete(threadId);
-        }
+        if (!liveIds.has(threadId)) { unsubscribe(); unsubscribeReplies.delete(threadId); }
       });
-
       nextThreads.forEach((thread) => {
         if (unsubscribeReplies.has(thread.id)) return;
         const repliesRef = collection(db, 'rooms', roomCode, 'comments', thread.id, 'replies');
@@ -398,13 +426,12 @@ export default function CodeWorkspace({
     }, (error) => {
       console.warn('[LivePad Comments] Realtime listener unavailable', error);
     });
-
     return () => {
       unsubscribeComments();
       unsubscribeReplies.forEach((unsubscribe) => unsubscribe());
       unsubscribeReplies.clear();
     };
-  }, [roomCode, currentUserUid]);
+  }, [roomCode, currentUserUid, cloudCollaborationEnabled]);
 
   // Floating Workspace Chat State
   const [unreadChatCount, setUnreadChatCount] = useState(0);
@@ -968,6 +995,11 @@ export default function CodeWorkspace({
   const projectSaveDebounceRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const parentContentDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingEditorContentRef = useRef<Map<string, string>>(new Map());
+  const filesRef = useRef<ProjectFile[]>(files);
+
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
 
   const handleReorderTabs = useCallback((draggedId: string, targetId: string) => {
     setOpenFileIds((prev) => {
@@ -1194,7 +1226,7 @@ export default function CodeWorkspace({
     const saveTimer = setTimeout(() => {
       projectSaveDebounceRef.current.delete(fileToUpdateId);
       const latestContent = pendingEditorContentRef.current.get(fileToUpdateId);
-      const latestFile = files.find((f) => f.id === fileToUpdateId);
+      const latestFile = filesRef.current.find((f) => f.id === fileToUpdateId);
       if (!latestFile || latestContent === undefined) return;
       void saveProjectFileDoc(workspaceId, activeProjectId, {
         ...latestFile, content: latestContent, updatedAt: Date.now(), isUnsaved: false
@@ -1212,7 +1244,7 @@ export default function CodeWorkspace({
       }, 700);
       autoSaveDebounceRef.current.set(fileToUpdateId, newTimer);
     }
-  }, [activeFileId, activeProjectId, files, isAutoSaveEnabled, onUpdateContent, workspaceId]);
+  }, [activeFileId, activeProjectId, isAutoSaveEnabled, onUpdateContent, workspaceId]);
 
   useEffect(() => {
     return () => {
@@ -2073,7 +2105,7 @@ export default function CodeWorkspace({
                     selectedText={commentContext.selectedText}
                     threads={commentThreads}
                     onAddThread={async (newThread) => {
-                      if (!roomCode || !db || !currentUserUid || !currentUserName) {
+                      if (!roomCode || !currentUserUid || !currentUserName) {
                         onAddToast('error', 'Set your real profile name before adding a comment.');
                         return;
                       }
@@ -2089,15 +2121,22 @@ export default function CodeWorkspace({
                       };
                       setCommentThreads((prev) => [{ id: threadId, ...thread }, ...prev]);
                       try {
-                        await setDoc(doc(db, 'rooms', roomCode, 'comments', threadId), thread);
+                        if (cloudCollaborationEnabled) {
+                          await setDoc(doc(db, 'rooms', roomCode, 'comments', threadId), thread);
+                        } else {
+                          const raw = localStorage.getItem(localCommentsKey);
+                          const local = raw ? JSON.parse(raw) : [];
+                          localStorage.setItem(localCommentsKey, JSON.stringify([{ id: threadId, ...thread }, ...(Array.isArray(local) ? local : [])].slice(0, 100)));
+                          localCommentsChannelRef.current?.postMessage({ type: 'comment-update', thread: { id: threadId, ...thread } });
+                        }
                       } catch (error) {
                         setCommentThreads((prev) => prev.filter((item) => item.id !== threadId));
                         console.warn('[LivePad Comments] Failed to create thread', error);
-                        onAddToast('error', 'Comment could not be posted. Check your connection and permissions.');
+                        onAddToast('error', 'Comment could not be posted.');
                       }
                     }}
                     onAddReply={async (threadId, text) => {
-                      if (!roomCode || !db || !currentUserUid || !currentUserName) return;
+                      if (!roomCode || !currentUserUid || !currentUserName) return;
                       const replyId = `reply-${currentUserUid}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
                       const reply = {
                         authorUid: currentUserUid,
@@ -2110,7 +2149,18 @@ export default function CodeWorkspace({
                         ? { ...item, replies: [...(item.replies || []), { id: replyId, ...reply }] }
                         : item));
                       try {
-                        await setDoc(doc(db, 'rooms', roomCode, 'comments', threadId, 'replies', replyId), reply);
+                        if (cloudCollaborationEnabled) {
+                          await setDoc(doc(db, 'rooms', roomCode, 'comments', threadId, 'replies', replyId), reply);
+                        } else {
+                          const updated = commentThreads.find((item) => item.id === threadId);
+                          const nextThread = updated ? { ...updated, replies: [...(updated.replies || []), { id: replyId, ...reply }] } : null;
+                          if (nextThread) {
+                            const raw = localStorage.getItem(localCommentsKey);
+                            const local = Array.isArray(raw ? JSON.parse(raw) : []) ? JSON.parse(raw || '[]') : [];
+                            localStorage.setItem(localCommentsKey, JSON.stringify(local.map((item: any) => item.id === threadId ? nextThread : item)));
+                            localCommentsChannelRef.current?.postMessage({ type: 'comment-update', thread: nextThread });
+                          }
+                        }
                       } catch (error) {
                         setCommentThreads((prev) => prev.map((item) => item.id === threadId
                           ? { ...item, replies: (item.replies || []).filter((replyItem: any) => replyItem.id !== replyId) }
@@ -2120,22 +2170,37 @@ export default function CodeWorkspace({
                       }
                     }}
                     onToggleResolveThread={async (threadId) => {
-                      if (!roomCode || !db) return;
+                      if (!roomCode) return;
                       const thread = commentThreads.find((item) => item.id === threadId);
                       if (!thread) return;
                       try {
-                        await updateDoc(doc(db, 'rooms', roomCode, 'comments', threadId), {
-                          status: thread.status === 'open' ? 'resolved' : 'open'
-                        });
+                        const status = thread.status === 'open' ? 'resolved' : 'open';
+                        if (cloudCollaborationEnabled) {
+                          await updateDoc(doc(db, 'rooms', roomCode, 'comments', threadId), { status });
+                        } else {
+                          const updated = { ...thread, status };
+                          const raw = localStorage.getItem(localCommentsKey);
+                          const local = JSON.parse(raw || '[]');
+                          localStorage.setItem(localCommentsKey, JSON.stringify(Array.isArray(local) ? local.map((item: any) => item.id === threadId ? updated : item) : [updated]));
+                          setCommentThreads((prev) => prev.map((item) => item.id === threadId ? updated : item));
+                          localCommentsChannelRef.current?.postMessage({ type: 'comment-update', thread: updated });
+                        }
                       } catch (error) {
                         console.warn('[LivePad Comments] Failed to update thread', error);
                         onAddToast('error', 'Comment status could not be updated.');
                       }
                     }}
                     onDeleteThread={async (threadId) => {
-                      if (!roomCode || !db) return;
+                      if (!roomCode) return;
                       try {
-                        await deleteDoc(doc(db, 'rooms', roomCode, 'comments', threadId));
+                        if (cloudCollaborationEnabled) {
+                          await deleteDoc(doc(db, 'rooms', roomCode, 'comments', threadId));
+                        } else {
+                          const local = JSON.parse(localStorage.getItem(localCommentsKey) || '[]');
+                          localStorage.setItem(localCommentsKey, JSON.stringify(Array.isArray(local) ? local.filter((item: any) => item.id !== threadId) : []));
+                          setCommentThreads((prev) => prev.filter((item) => item.id !== threadId));
+                          localCommentsChannelRef.current?.postMessage({ type: 'comment-delete', id: threadId });
+                        }
                       } catch (error) {
                         console.warn('[LivePad Comments] Failed to delete thread', error);
                         onAddToast('error', 'Comment could not be deleted.');

@@ -29,6 +29,7 @@ export const auth = isFirebaseConfigured
   : null as any;
 
 let authPromise: Promise<User | null> | null = null;
+let anonymousAuthUnavailable = false;
 
 export function ensureAuth(): Promise<User | null> {
   if (!isFirebaseConfigured || !auth) {
@@ -45,10 +46,18 @@ export function ensureAuth(): Promise<User | null> {
           resolve(user);
         } else {
           try {
+            if (anonymousAuthUnavailable) {
+              unsub();
+              resolve(null);
+              return;
+            }
             const cred = await signInAnonymously(auth);
             unsub();
             resolve(cred.user);
           } catch (err) {
+            // A disabled Anonymous provider is a configuration state, not a transient
+            // network failure. Cache it so every component does not spam signUp requests.
+            anonymousAuthUnavailable = true;
             unsub();
             resolve(null);
           }

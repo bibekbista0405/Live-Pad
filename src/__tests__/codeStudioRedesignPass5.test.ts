@@ -40,3 +40,27 @@ describe('Code Studio Pass 5 collaboration and editor responsiveness', () => {
     expect(source).toContain('isAutoSaveEnabled ? 450 : 900');
   });
 });
+
+
+describe('Code Studio collaboration hardening', () => {
+  it('avoids duplicate Tiptap Link and Underline extensions', async () => {
+    const source = await import('node:fs/promises').then((m) => m.readFile('src/components/RichTextEditor.tsx', 'utf8'));
+    expect(source).toContain('link: false');
+    expect(source).toContain('underline: false');
+    expect(source).toContain('Link.configure');
+    expect(source).toContain('Underline,');
+  });
+
+  it('does not repeatedly attempt disabled anonymous Firebase auth', async () => {
+    const source = await import('node:fs/promises').then((m) => m.readFile('src/lib/firebase.ts', 'utf8'));
+    expect(source).toContain('anonymousAuthUnavailable');
+    expect(source).toContain('Anonymous provider');
+  });
+
+  it('keeps Monaco uncontrolled during normal typing', async () => {
+    const source = await import('node:fs/promises').then((m) => m.readFile('src/components/code/MonacoEditorWrapper.tsx', 'utf8'));
+    expect(source).toContain('defaultValue={value}');
+    expect(source).toContain('pushEditOperations');
+    expect(source).toContain('formatOnType: false');
+  });
+});

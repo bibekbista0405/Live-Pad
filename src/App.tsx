@@ -97,7 +97,6 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { db, isFirebaseConfigured, auth, ensureAuth, handleFirestoreError, OperationType, isFirestoreQuotaExhausted, markQuotaExhausted } from './lib/firebase';
 import { getDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
 import { useLiveRoom } from './hooks/useLiveRoom';
 import { WorkspaceLibraryService, UserWorkspaceRef } from './services/workspaceLibraryService';
 import { Theme, ToastMessage, UserPresence, LocalNotepad, TrashedNotepad, SyncStatus, Attachment, WorkspaceType, WorkspaceRole, WorkspacePrivacy } from './types';
@@ -3723,16 +3722,14 @@ console.warn("Verify your variables before deployment!");
 
     let activeUid = auth?.currentUser?.uid || uid;
     if (isFirebaseConfigured && auth && !auth.currentUser) {
-      try {
-        const cred = await signInAnonymously(auth);
-        if (cred?.user) {
-          activeUid = cred.user.uid;
-        }
-      } catch (authErr) {
-        console.warn("Anonymous auth pre-sign-in before room creation failed:", authErr);
-      }
+      const cloudUser = await ensureAuth();
+      if (cloudUser?.uid) activeUid = cloudUser.uid;
     }
-    const currentUid = activeUid || ('local_' + Math.random().toString(36).substring(2, 11));
+    const currentUid = activeUid || (localStorage.getItem('livepad_local_uid') || (() => {
+      const localUid = 'local_' + Math.random().toString(36).substring(2, 11);
+      localStorage.setItem('livepad_local_uid', localUid);
+      return localUid;
+    })());
 
     let uniqueCode = generateRoomCode();
     // Guarantee collision resistance by querying Firestore

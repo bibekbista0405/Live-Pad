@@ -4,7 +4,7 @@ import { transcribeAudio, cleanupDictation, generateCopilotResponse, hasGeminiKe
 
 export const aiRouter = Router();
 
-// Multimodal Gemini AI Speech Transcription
+// Multimodal server-side AI speech transcription
 aiRouter.post('/dictation/transcribe', requireAuth, async (req, res) => {
   try {
     const { audioBase64, mimeType = 'audio/webm', language = 'en-US', smartPunctuation = true } = req.body;
@@ -14,7 +14,7 @@ aiRouter.post('/dictation/transcribe', requireAuth, async (req, res) => {
     }
 
     if (!hasGeminiKey()) {
-      return res.status(503).json({ error: 'Gemini API key is not configured on server' });
+      return res.status(503).json({ error: 'Server-side AI provider is not configured' });
     }
 
     const result = await transcribeAudio({ audioBase64, mimeType, language, smartPunctuation });
@@ -35,7 +35,7 @@ aiRouter.post('/dictation/cleanup', requireAuth, async (req, res) => {
     }
 
     if (!hasGeminiKey()) {
-      return res.status(503).json({ error: 'Gemini API key is not configured on server' });
+      return res.status(503).json({ error: 'Server-side AI provider is not configured' });
     }
 
     const result = await cleanupDictation({ text, language });
@@ -48,7 +48,7 @@ aiRouter.post('/dictation/cleanup', requireAuth, async (req, res) => {
 
 // Whisper API Proxy Fallback Route
 aiRouter.post('/dictation/whisper', requireAuth, (req, res) => {
-  return res.status(501).json({ error: 'Whisper fallback route. Use Gemini AI or Browser Speech engine.' });
+  return res.status(501).json({ error: 'Whisper fallback route. Use the cloud AI or Browser Speech engine.' });
 });
 
 // Workspace-aware AI Copilot
@@ -56,7 +56,7 @@ aiRouter.post('/ai/copilot', requireAuth, async (req, res) => {
   try {
     const { prompt, activeFile, files } = req.body;
     if (typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
-    if (!hasGeminiKey()) return res.status(503).json({ error: 'Gemini API key is not configured on server' });
+    if (!hasGeminiKey()) return res.status(503).json({ error: 'Server-side AI provider is not configured' });
     const safeFiles = Array.isArray(files) ? files.slice(0, 30) : [];
     const result = await generateCopilotResponse({ prompt: prompt.slice(0, 12000), activeFile, files: safeFiles });
     return res.json(result);

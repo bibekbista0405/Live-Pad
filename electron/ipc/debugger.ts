@@ -20,6 +20,47 @@ const MAX_SESSIONS_PER_RENDERER = 4;
 const MAX_ARGS = 32;
 const MAX_EXPRESSION_LENGTH = 10_000;
 
+const DEBUGGER_COMMAND_TIMEOUT_MS = 5_000;
+
+function sendDebuggerCommand<T = any>(session: DebugSession, method: string, params?: Record<string, unknown>): Promise<T> {
+  if (!session.ws || session.ws.readyState !== WebSocket.OPEN) {
+    return Promise.reject(new Error('Debugger is not connected'));
+  }
+
+  const requestId = Date.now() + Math.floor(Math.random() * 1000);
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      session.ws?.off('message', onMessage);
+      reject(new Error(`Debugger command timed out: ${method}`));
+    }, DEBUGGER_COMMAND_TIMEOUT_MS);
+
+    const onMessage = (msg: WebSocket.RawData) => {
+      try {
+        const parsed = JSON.parse(msg.toString());
+        if (parsed.id !== requestId) return;
+        clearTimeout(timeout);
+        session.ws?.off('message', onMessage);
+        if (parsed.error) {
+          reject(new Error(parsed.error.message || `Debugger command failed: ${method}`));
+          return;
+        }
+        resolve(parsed.result as T);
+      } catch {
+        // Ignore unrelated or malformed inspector messages.
+      }
+    };
+
+    session.ws.on('message', onMessage);
+    try {
+      session.ws.send(JSON.stringify({ id: requestId, method, ...(params ? { params } : {}) }));
+    } catch (error) {
+      clearTimeout(timeout);
+      session.ws.off('message', onMessage);
+      reject(error);
+    }
+  });
+}
+
 function validateArgs(args: unknown): string[] {
   if (!Array.isArray(args) || args.length > MAX_ARGS) throw new Error('Invalid debugger arguments');
   return args.map((arg) => {
@@ -124,8 +165,13 @@ export function setupDebuggerIPC() {
     const methodMap: Record<string, string> = { resume: 'Debugger.resume', stepOver: 'Debugger.stepOver', stepInto: 'Debugger.stepInto', stepOut: 'Debugger.stepOut', pause: 'Debugger.pause' };
     const method = methodMap[action];
     if (!method) return false;
-    session.ws.send(JSON.stringify({ id: Date.now(), method }));
-    return true;
+    try {
+      await sendDebuggerCommand(session, method);
+      return true;
+    } catch (error) {
+      console.error(`Debugger ${action} failed:`, error);
+      return false;
+    }
   });
 
   ipcMain.handle('debugger:setBreakpoint', async (event, sessionId: string, file: string, line: number) => {
@@ -135,30 +181,38 @@ export function setupDebuggerIPC() {
     }
     const safeFile = assertWorkspacePath(event.sender.id, file);
     const safeLine = validateLine(line);
-    const reqId = Date.now();
-    session.ws.send(JSON.stringify({ id: reqId, method: 'Debugger.setBreakpointByUrl', params: { lineNumber: safeLine - 1, urlRegex: safeFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') } }));
     const id = `bp-${safeFile}-${safeLine}`;
-    session.breakpoints.push({ id, file: safeFile, line: safeLine, verified: true });
-    return { verified: true, id };
+    try {
+      const result = await sendDebuggerCommand<{ breakpointId?: string; locations?: Array<{ lineNumber?: number }> }>(
+        session,
+        'Debugger.setBreakpointByUrl',
+        {
+          lineNumber: safeLine - 1,
+          urlRegex: safeFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        },
+      );
+      const verified = Array.isArray(result?.locations) && result.locations.length > 0;
+      session.breakpoints.push({ id: result?.breakpointId || id, file: safeFile, line: safeLine, verified });
+      return { verified, id: result?.breakpointId || id };
+    } catch (error) {
+      console.error('Debugger breakpoint failed:', error);
+      return { verified: false, id };
+    }
   });
 
   ipcMain.handle('debugger:evaluate', async (event, sessionId: string, expression: string) => {
     const session = activeSessions.get(sessionId);
     if (!session || session.webContentsId !== event.sender.id || !session.ws || session.ws.readyState !== WebSocket.OPEN) return { result: 'Debugger not attached' };
     if (typeof expression !== 'string' || !expression.trim() || expression.length > MAX_EXPRESSION_LENGTH) throw new Error('Invalid debugger expression');
-    return new Promise((resolve) => {
-      const reqId = Date.now();
-      const handler = (msg: WebSocket.RawData) => {
-        try {
-          const parsed = JSON.parse(msg.toString());
-          if (parsed.id === reqId) {
-            session.ws?.off('message', handler);
-            resolve(parsed.result?.result?.value ?? parsed.result?.result?.description ?? 'undefined');
-          }
-        } catch { /* ignore */ }
-      };
-      session.ws?.on('message', handler);
-      session.ws?.send(JSON.stringify({ id: reqId, method: 'Runtime.evaluate', params: { expression } }));
-    });
+    try {
+      const response = await sendDebuggerCommand<{ result?: { value?: unknown; description?: string } }>(
+        session,
+        'Runtime.evaluate',
+        { expression },
+      );
+      return response?.result?.value ?? response?.result?.description ?? 'undefined';
+    } catch (error) {
+      return `Debugger evaluation failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
   });
 }

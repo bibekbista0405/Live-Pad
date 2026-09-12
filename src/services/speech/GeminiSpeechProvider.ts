@@ -5,8 +5,8 @@ import { applySmartPunctuation } from '../../utils/speechPunctuation';
 import { auth } from '../../lib/firebase';
 export class GeminiSpeechProvider implements ISpeechProvider {
   id = 'gemini' as const;
-  name = 'Gemini AI Voice Engine';
-  description = 'Multimodal Google Gemini AI dictation with high punctuation accuracy, formatting & multi-language support.';
+  name = 'Cloud AI Voice Engine';
+  description = 'Cloud AI dictation with punctuation, formatting, and multi-language support.';
   supportsOffline = false;
   supportsContinuous = true;
 
@@ -83,7 +83,7 @@ export class GeminiSpeechProvider implements ISpeechProvider {
         const base64Data = (reader.result as string).split(',')[1];
         if (!base64Data) return;
 
-        // Call backend Gemini AI speech endpoint
+        // Call the authenticated server-side speech endpoint
         const response = await fetch('/api/dictation/transcribe', {
           method: 'POST',
           headers: {
@@ -127,7 +127,7 @@ export class GeminiSpeechProvider implements ISpeechProvider {
         }
       };
     } catch (e) {
-      console.warn('[GeminiSpeechProvider] Batch processing error:', e);
+      console.warn('[CloudSpeechProvider] Batch processing error:', e);
     }
   }
 

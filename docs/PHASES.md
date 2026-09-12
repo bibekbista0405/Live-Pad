@@ -20,3 +20,8 @@ then feature hardening and production polish.**
 Phase 2 does not perform a destructive production migration. It establishes the
 canonical model, security rules, repository boundary, and compatibility adapter needed
 for safe incremental migration.
+
+
+## Phase 5 implementation status
+
+Phase 5 is in progress. The current desktop baseline and acceptance criteria are documented in `docs/PHASE5_CODING_WORKSPACE_ELECTRON.md`.

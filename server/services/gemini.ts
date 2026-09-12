@@ -35,7 +35,7 @@ export async function transcribeAudio({
 }: TranscribeParams) {
   const ai = getGeminiClient();
   if (!ai) {
-    throw new Error('Gemini API key is not configured on server');
+    throw new Error('Server-side AI provider is not configured');
   }
 
   const promptText = `Transcribe this spoken audio accurately in language code ${language}. Apply proper punctuation, capitalization, and formatting. Do NOT summarize or add explanations; output only the exact transcription.`;
@@ -72,7 +72,7 @@ export async function cleanupDictation({
 }: CleanupParams) {
   const ai = getGeminiClient();
   if (!ai) {
-    throw new Error('Gemini API key is not configured on server');
+    throw new Error('Server-side AI provider is not configured');
   }
 
   const response = await ai.models.generateContent({
@@ -95,7 +95,7 @@ export interface CopilotParams {
 
 export async function generateCopilotResponse({ prompt, activeFile, files = [] }: CopilotParams) {
   const ai = getGeminiClient();
-  if (!ai) throw new Error('Gemini API key is not configured on server');
+  if (!ai) throw new Error('Server-side AI provider is not configured');
 
   const workspaceContext = files.slice(0, 30).map((file) =>
     `FILE: ${file.path || file.name}\nLANGUAGE: ${file.language || 'unknown'}\n${(file.content || '').slice(0, 12000)}`
@@ -112,5 +112,5 @@ export async function generateCopilotResponse({ prompt, activeFile, files = [] }
     config: { systemInstruction: 'Be precise, security-conscious, and honest about what you can actually execute. Do not fabricate test results, APIs, files, or successful changes.' }
   });
 
-  return { text: response.text?.trim() || 'Gemini returned an empty response.' };
+  return { text: response.text?.trim() || 'AI provider returned an empty response.' };
 }

@@ -50,7 +50,7 @@ export class SpeechEngineManager {
       }
     }
 
-    // PWA Desktop mode prefers Gemini AI or Browser Speech
+    // PWA Desktop mode prefers the cloud AI voice engine or Browser Speech
     if (isPWA) {
       const gemini = this.providers.get('gemini');
       if (gemini && gemini.isAvailable()) return gemini;

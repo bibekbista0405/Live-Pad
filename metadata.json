@@ -5,6 +5,6 @@
     "microphone"
   ],
   "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+    "SERVER_SIDE_AI_API"
   ]
 }

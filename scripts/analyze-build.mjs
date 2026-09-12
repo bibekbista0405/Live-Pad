@@ -26,9 +26,14 @@ try {
     console.log(`${(item.size / 1024).toFixed(1).padStart(9)} KiB  ${path.relative(process.cwd(), item.file)}`);
   }
   const oversized = files.filter((item) => item.size > 1024 * 1024);
+  const installTimeHeavy = files.filter((item) => item.size > 2 * 1024 * 1024 && !/(worker-|monaco-vendor-)/.test(path.basename(item.file)));
   if (oversized.length) {
     console.log(`\nWarning: ${oversized.length} asset(s) exceed 1 MiB raw.`);
-    process.exitCode = 0;
+  }
+  if (installTimeHeavy.length) {
+    console.log(`Warning: ${installTimeHeavy.length} non-Monaco/non-worker asset(s) exceed 2 MiB raw.`);
+  } else {
+    console.log('Install-time heavy asset check: PASS (large Monaco/worker assets are intentionally runtime-loaded).');
   }
 } catch (error) {
   console.error('Build analysis failed:', error instanceof Error ? error.message : error);

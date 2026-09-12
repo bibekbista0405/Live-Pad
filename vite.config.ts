@@ -76,8 +76,12 @@ export default defineConfig(() => {
           ]
         },
         workbox: {
-          maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,png,svg,woff,woff2,ico,json}'],
+          // Keep very large Monaco workers/vendor chunks out of the install-time
+          // precache. They are fetched on demand by the coding workspace and
+          // caching them at runtime avoids a 20+ MiB PWA install payload.
+          globIgnores: ['**/*worker-*.js', '**/monaco-vendor-*.js'],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: false,
@@ -105,6 +109,20 @@ export default defineConfig(() => {
                 cacheableResponse: {
                   statuses: [0, 200]
                 }
+              }
+            },
+            {
+              // Large same-origin chunks intentionally excluded from precache
+              // (Monaco workers/vendor) are cached after first use.
+              urlPattern: /\/assets\/.*\.js$/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'livepad-runtime-scripts',
+                expiration: {
+                  maxEntries: 40,
+                  maxAgeSeconds: 60 * 60 * 24 * 30
+                },
+                cacheableResponse: { statuses: [200] }
               }
             },
             {

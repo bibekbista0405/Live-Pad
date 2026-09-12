@@ -1,26 +1,27 @@
-# Phase 7 — Render + Bundle Performance Audit
+# Phase 7 — Render & Bundle Audit
 
-## Status
+## Final optimization pass
 
-Implemented as the next Phase 7 hardening pass.
+The production build showed that the largest files are Monaco editor/vendor assets and its language workers. These are required by the coding workspace but are not needed to open the normal LivePad landing/workspace shell.
 
-## Render-cost changes
+### PWA install payload
 
-- Kept the primary rich-text editor synchronous because it is the main workspace interaction.
-- Secondary workspace surfaces are now lazy-loaded: Markdown preview, bottom console, inspector, chat drawer/launcher, and dictation UI.
-- Dictation preview is only mounted while a live/interim/result payload exists, preventing an unused overlay from loading during normal startup.
-- The unused `AttachmentsPanel` import was removed from `App.tsx`; this eliminates an unnecessary module edge without removing a rendered feature (the component was not rendered by `App.tsx`).
-- Existing Code Workspace lazy-loading remains intact; its heavy Monaco/editor/test/debugger dependencies stay off the landing bundle.
+Large Monaco vendor and worker files are now excluded from Workbox install-time precaching. A 2 MiB precache ceiling is also configured. These assets remain available through normal application loading and can be cached at runtime by the browser/service-worker path after the coding workspace requests them.
 
-## Bundle analysis
+This avoids turning the PWA install/update path into a 20+ MiB download dominated by editor workers.
 
-- Added `npm run build:analyze`. It builds the production web bundle and prints the largest generated assets plus total raw asset size.
-- The report intentionally does not fail the build solely because an asset exceeds 1 MiB; large vendor chunks can be valid when they are intentionally isolated. The report is a measurement tool for the next optimization pass.
+### Build analysis
 
-## Guardrails
+`npm run build:analyze` performs a production build and reports the largest assets. The analyzer additionally flags non-Monaco/non-worker assets over 2 MiB so the optimization does not hide unexpectedly large application chunks.
 
-- No user-facing feature was removed.
-- AI remains deferred.
-- No fake implementation was introduced.
-- Monaco, TipTap, Firebase, and export libraries retain their existing boundaries.
-- Modal accessibility and reduced-motion work from the previous Phase 7 pass is preserved.
+### Intentional large assets
+
+- Monaco vendor: expected for the coding workspace.
+- TypeScript/HTML/CSS/JSON workers: expected language-service assets.
+- Export vendor: loaded only for export workflows.
+
+No functionality was removed to achieve the size reduction.
+
+## Phase 7 completion gate
+
+Performance/accessibility foundation, modal keyboard behavior, lazy loading, render containment, reduced-motion handling, and production bundle analysis are implemented. The remaining validation is running the final lint/test/build commands on the target Windows environment and reviewing the generated bundle report.

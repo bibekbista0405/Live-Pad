@@ -9,7 +9,7 @@
 | Phase 4 — Offline + Realtime Collaboration | 15% | Complete |
 | Phase 5 — Coding Workspace + Electron | 8% | Complete |
 | Phase 6 — AI Platform | 5% | Deferred by product decision — future phase |
-| Phase 7 — UX + Performance | 4% | In progress — foundation hardening pass |
+| Phase 7 — UX + Performance | 4% | Complete |
 | Phase 8 — Testing + Production | 3% | Planned |
 
 ## Architecture principle

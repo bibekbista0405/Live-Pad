@@ -826,3 +826,17 @@ input[type="range"]::-moz-range-thumb {
     scroll-behavior: auto !important;
   }
 }
+
+
+/* Phase 7 mobile/touch audit: coarse pointers get comfortable minimum
+   hit areas without changing desktop density. Icon-only controls can opt
+   out with data-compact-control when a smaller target is intentional. */
+@media (pointer: coarse) {
+  :where(button, [role="button"], a) {
+    min-height: 44px;
+  }
+
+  :where(button, [role="button"], a)[data-compact-control="true"] {
+    min-height: 36px;
+  }
+}

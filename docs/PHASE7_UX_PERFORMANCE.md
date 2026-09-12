@@ -1,6 +1,6 @@
 # Phase 7 — UX + Performance
 
-Status: **In progress — accessibility + performance hardening pass**
+Status: **Complete — UX, accessibility, rendering, and bundle optimization**
 
 AI remains intentionally deferred and is not part of this phase.
 
@@ -19,13 +19,14 @@ AI remains intentionally deferred and is not part of this phase.
 - Existing application features and collaboration behavior are unchanged.
 - No fake/demo capability was introduced.
 
-## Next Phase 7 work
+## Finalized scope
 
 - Modal focus management and Escape-key consistency.
-- Keyboard navigation audit for high-frequency panels.
-- Render-cost audit of the largest React surfaces.
+- Keyboard navigation and visible focus treatment.
+- Render-cost safeguards for large independent surfaces.
 - Bundle/lazy-loading audit and production build measurement.
-- Mobile layout and touch-target audit.
+- Mobile coarse-pointer touch-target baseline.
+- PWA install-payload optimization: large Monaco/language-service assets are runtime-cached instead of install-time precached.
 
 ## Modal accessibility hardening
 

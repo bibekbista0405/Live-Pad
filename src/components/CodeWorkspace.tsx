@@ -2561,7 +2561,7 @@ export default function CodeWorkspace({
           }}
           onDownloadProjectZip={handleDownloadProjectZip}
           selectedIds={selectedIds}
-        />
+        />}
 
         <QuickOpenModal
           isOpen={isQuickOpenOpen}
@@ -2658,7 +2658,7 @@ export default function CodeWorkspace({
             );
             onAddToast('info', `Renamed project.`);
           }}
-        />}
+        />
 
         <SearchFilesModal
           isOpen={isSearchModalOpen}

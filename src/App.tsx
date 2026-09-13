@@ -4215,9 +4215,6 @@ console.warn("Verify your variables before deployment!");
               <div className="relative mb-2 mt-4">
                 {/* Large Center Logo with Click pointer rays to match exact design */}
                 <div
-                  initial={{ rotate: -5, scale: 0.95 }}
-                  animate={{ rotate: 0, scale: 1 }}
-                  transition={{ duration: 0.5 }}
                   className="flex flex-col items-center gap-4"
                 >
                   <Logo iconSize={110} showText={false} />

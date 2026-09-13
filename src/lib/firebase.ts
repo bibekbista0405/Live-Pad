@@ -70,6 +70,7 @@ export function ensureAuth(): Promise<User | null> {
             unsub();
             resolve(cred.user);
           } catch (err) {
+            // Anonymous provider may be disabled in the Firebase Console.
             // Anonymous Auth is often disabled on Firebase projects. Ask the
             // LivePad server for a pseudonymous Firebase custom-token identity.
             // Firestore rules remain fully authenticated; the room code is not

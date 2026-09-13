@@ -15,10 +15,10 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js electron/*.js",
-    "lint": "tsc --noEmit",
+    "lint": "node scripts/typecheck.mjs",
     "test": "vitest run",
     "test:rules": "node scripts/test-rules.mjs",
-    "check:architecture": "tsc --noEmit",
+    "check:architecture": "node scripts/typecheck.mjs",
     "build:analyze": "npm run build && node scripts/analyze-build.mjs",
     "build:report": "node scripts/analyze-build.mjs"
   },

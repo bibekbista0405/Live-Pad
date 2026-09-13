@@ -1498,11 +1498,20 @@ export default function App() {
     let roomExists = false;
     let roomData: any = null;
 
-    // Verify room existence & metadata via Firebase
+    // Verify cloud rooms only when a real Firebase user is available. If Auth is
+    // unavailable, use the local room descriptor for same-browser collaboration
+    // instead of failing the join with a Firestore permission error.
     if (isFirebaseConfigured && db) {
       try {
-        await ensureAuth();
-        const docRef = doc(db, 'rooms', cleanCode);
+        const cloudUser = await ensureAuth();
+        if (!cloudUser) {
+          try {
+            const rawMeta = localStorage.getItem(`livepad_local_room_meta_${cleanCode}`);
+            const localMeta = rawMeta ? JSON.parse(rawMeta) : null;
+            if (localMeta && typeof localMeta === 'object') { roomExists = true; roomData = localMeta; }
+          } catch {}
+        } else {
+          const docRef = doc(db, 'rooms', cleanCode);
         let docSnap = await getDoc(docRef);
 
         // Fallback checks for case or formatting variations if primary cleanCode lookup returns empty
@@ -1524,9 +1533,10 @@ export default function App() {
           }
         }
 
-        if (docSnap && docSnap.exists()) {
-          roomExists = true;
-          roomData = docSnap.data();
+          if (docSnap && docSnap.exists()) {
+            roomExists = true;
+            roomData = docSnap.data();
+          }
         }
       } catch (err: any) {
         console.error(`[handleNavigateRoom] Firestore room verification error for "${cleanCode}":`, err);
@@ -3721,9 +3731,13 @@ console.warn("Verify your variables before deployment!");
     setEditedName(finalName);
 
     let activeUid = auth?.currentUser?.uid || uid;
+    let cloudAuthenticated = Boolean(auth?.currentUser?.uid);
     if (isFirebaseConfigured && auth && !auth.currentUser) {
       const cloudUser = await ensureAuth();
-      if (cloudUser?.uid) activeUid = cloudUser.uid;
+      if (cloudUser?.uid) {
+        activeUid = cloudUser.uid;
+        cloudAuthenticated = true;
+      }
     }
     const currentUid = activeUid || (localStorage.getItem('livepad_local_uid') || (() => {
       const localUid = 'local_' + Math.random().toString(36).substring(2, 11);
@@ -3733,7 +3747,7 @@ console.warn("Verify your variables before deployment!");
 
     let uniqueCode = generateRoomCode();
     // Guarantee collision resistance by querying Firestore
-    if (isFirebaseConfigured && db) {
+    if (isFirebaseConfigured && db && cloudAuthenticated) {
       try {
         let attempts = 0;
         while (attempts < 3) {
@@ -3755,7 +3769,7 @@ console.warn("Verify your variables before deployment!");
     const welcomeContent = `Welcome to ${wsName} (${uniqueCode})!\n\nStart together, keep it simple, and learn by doing.\n\nIn Code Studio you can:\n• open the same coding session together\n• edit code in real time\n• run the code and see the result\n• ask questions in chat and discuss code\n\n${wsType === 'teaching' ? 'Teacher: open Code Studio when the class is ready. Students will follow automatically.' : 'Friends: everyone can learn, experiment, and help each other.'}\n\nTip: start with one small change, then Run & Check.`;
 
     try {
-      if (isFirebaseConfigured && db) {
+      if (isFirebaseConfigured && db && cloudAuthenticated) {
         const roomPayload = {
           workspaceId: uniqueCode,
           roomCode: uniqueCode,
@@ -3828,8 +3842,21 @@ console.warn("Verify your variables before deployment!");
         }
       }
 
-      // Seed local storage backup after successful cloud save (or in local mode)
-      localStorage.setItem(`livepad_local_room_${uniqueCode}`, welcomeContent);
+      // Keep a complete local room descriptor so another tab can join the same
+      // room when Firebase Authentication is unavailable. Cloud multi-device
+      // collaboration still requires a real Firebase-authenticated user.
+      try {
+        localStorage.setItem(`livepad_local_room_${uniqueCode}`, welcomeContent);
+        localStorage.setItem(`livepad_local_room_meta_${uniqueCode}`, JSON.stringify({
+          workspaceId: uniqueCode, roomCode: uniqueCode, workspaceName: wsName, title: wsName,
+          workspaceType: selectedWorkspaceType, privacy: selectedPrivacy,
+          participantLimit: customParticipantLimit || typeDef.defaultLimit,
+          creatorId: currentUid, creatorRole: 'owner', defaultRole: typeDef.participantRole,
+          ownerName: finalName, status: 'active', codeModeOpen: false,
+          participants: { [currentUid]: { uid: currentUid, name: finalName, role: 'owner', joinedAt: Date.now(), color: userColorLocal, isOnline: true, lastActive: Date.now() } },
+          createdAt: Date.now(), updatedAt: Date.now()
+        }));
+      } catch {}
 
       const navigated = await handleNavigateRoom(uniqueCode);
       if (navigated) {

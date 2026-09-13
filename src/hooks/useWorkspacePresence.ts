@@ -1,7 +1,12 @@
 import { useMemo } from 'react';
 import type { NoteRoom, UserPresence, UserStatus, WorkspaceParticipant } from '../types';
 
-export function useWorkspacePresence(room: NoteRoom | null, uid: string) {
+interface WorkspacePresenceResult {
+  activeUsers: UserPresence[];
+  allParticipants: Array<WorkspaceParticipant & { isOnline: boolean; lastActive?: number }>;
+}
+
+export function useWorkspacePresence(room: NoteRoom | null, uid: string): WorkspacePresenceResult {
   const activeUsers = useMemo(() => {
     const users = (Object.values(room?.users || {}) as UserPresence[]).map(user => {
       const timeDiff = Date.now() - (user.lastActive || 0);

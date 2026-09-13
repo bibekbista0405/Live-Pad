@@ -64,3 +64,24 @@ describe('Code Studio collaboration hardening', () => {
     expect(source).toContain('formatOnType: false');
   });
 });
+
+
+describe('Code Studio Pass 7 collaboration and stability', () => {
+  it('persists local room metadata for same-browser room fallback', async () => {
+    const source = await import('node:fs/promises').then((m) => m.readFile('src/App.tsx', 'utf8'));
+    expect(source).toContain('livepad_local_room_meta_');
+    expect(source).toContain('cloudAuthenticated');
+  });
+
+  it('keeps the live room hook return type explicit to avoid compiler inference recursion', async () => {
+    const source = await import('node:fs/promises').then((m) => m.readFile('src/hooks/useLiveRoom.ts', 'utf8'));
+    expect(source).toContain('interface UseLiveRoomResult');
+    expect(source).toContain('): UseLiveRoomResult');
+  });
+
+  it('removes large animated background blur layers from the scroll surface', async () => {
+    const source = await import('node:fs/promises').then((m) => m.readFile('src/components/BackgroundParticles.tsx', 'utf8'));
+    expect(source).not.toContain('blur-[120px]');
+    expect(source).not.toContain('blur-[140px]');
+  });
+});

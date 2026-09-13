@@ -938,5 +938,5 @@ function MonacoEditorWrapperComponent({
   );
 }
 
-export default React.memo(MonacoEditorWrapperComponent);
+export default MonacoEditorWrapperComponent;
 

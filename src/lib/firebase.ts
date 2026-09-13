@@ -29,7 +29,18 @@ export const auth = isFirebaseConfigured
   : null as any;
 
 let authPromise: Promise<User | null> | null = null;
+const ANONYMOUS_AUTH_CACHE_KEY = 'livepad_anonymous_auth_unavailable_until';
+const ANONYMOUS_AUTH_CACHE_MS = 5 * 60 * 1000;
 let anonymousAuthUnavailable = false;
+
+function isAnonymousAuthCachedUnavailable(): boolean {
+  try {
+    const until = Number(localStorage.getItem(ANONYMOUS_AUTH_CACHE_KEY) || 0);
+    if (until > Date.now()) return true;
+    localStorage.removeItem(ANONYMOUS_AUTH_CACHE_KEY);
+  } catch {}
+  return false;
+}
 
 export function ensureAuth(): Promise<User | null> {
   if (!isFirebaseConfigured || !auth) {
@@ -37,6 +48,10 @@ export function ensureAuth(): Promise<User | null> {
   }
   if (auth.currentUser) {
     return Promise.resolve(auth.currentUser);
+  }
+  if (anonymousAuthUnavailable || isAnonymousAuthCachedUnavailable()) {
+    anonymousAuthUnavailable = true;
+    return Promise.resolve(null);
   }
   if (!authPromise) {
     authPromise = new Promise((resolve) => {
@@ -58,6 +73,7 @@ export function ensureAuth(): Promise<User | null> {
             // A disabled Anonymous provider is a configuration state, not a transient
             // network failure. Cache it so every component does not spam signUp requests.
             anonymousAuthUnavailable = true;
+            try { localStorage.setItem(ANONYMOUS_AUTH_CACHE_KEY, String(Date.now() + ANONYMOUS_AUTH_CACHE_MS)); } catch {}
             unsub();
             resolve(null);
           }

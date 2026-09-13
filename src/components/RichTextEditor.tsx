@@ -845,4 +845,4 @@ function RichTextEditorComponent({
   );
 }
 
-export default React.memo(RichTextEditorComponent);
+export default RichTextEditorComponent;

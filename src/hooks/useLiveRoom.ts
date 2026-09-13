@@ -50,7 +50,57 @@ const getLocalUid = () => {
   return uid;
 };
 
-export function useLiveRoom(roomId: string | null, userName: string) {
+const localRoomMetaKey = (roomId: string) => `livepad_local_room_meta_${roomId}`;
+
+function readLocalRoomMeta(roomId: string): Record<string, any> | null {
+  try {
+    const raw = localStorage.getItem(localRoomMetaKey(roomId));
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+interface UseLiveRoomResult {
+  room: NoteRoom | null;
+  syncStatus: SyncStatus;
+  error: string | null;
+  uid: string;
+  userColor: string;
+  isConnected: boolean;
+  updateContent: (text: string) => void;
+  setIsConnected: (connected: boolean) => void;
+  activeUsers: UserPresence[];
+  allParticipants: Array<WorkspaceParticipant & { isOnline: boolean; lastActive?: number }>;
+  setTyping: (isTyping: boolean) => void;
+  updateLabel: (newLabel: string) => Promise<void>;
+  updateTitle: (newTitle: string) => Promise<void>;
+  history: HistoryEntry[];
+  revertToHistory: (contentToApply: string) => Promise<void>;
+  updateCursorIndex: (indexOrObj: number | any, selectionEnd?: number) => void;
+  updateAttachments: (attachments: Attachment[]) => Promise<void>;
+  refresh: () => void;
+  currentRole: WorkspaceRole;
+  isCreator: boolean;
+  isOwner: boolean;
+  canEdit: boolean;
+  canComment: boolean;
+  archiveWorkspace: () => Promise<void>;
+  restoreWorkspace: () => Promise<void>;
+  deleteWorkspace: () => Promise<void>;
+  updateParticipantRole: (targetUid: string, newRole: WorkspaceRole) => Promise<void>;
+  removeParticipant: (targetUid: string) => Promise<void>;
+  transferOwnership: (newOwnerUid: string) => Promise<void>;
+  workspaceType: WorkspaceType;
+  workspaceName: string;
+  roomCode: string | null;
+  workspaceStatus: WorkspaceStatus;
+  codeModeOpen: boolean;
+  setCodeModeOpen: (open: boolean) => Promise<boolean>;
+}
+
+export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoomResult {
   const [useFirebase, setUseFirebase] = useState<boolean>(isFirebaseConfigured);
   const [room, setRoom] = useState<NoteRoom | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
@@ -332,8 +382,21 @@ export function useLiveRoom(roomId: string | null, userName: string) {
             snippet: (data.content || '').slice(0, 100),
           }).catch(() => {});
 
-          // Auto-persist snapshot content to local storage for PWA offline accessibility
+          // Cache a complete room descriptor for same-browser/offline reopen.
+          // This is only a local transport fallback and never grants cloud access.
           try {
+            localStorage.setItem(`livepad_local_room_meta_${roomId}`, JSON.stringify({
+              workspaceId: data.workspaceId || roomId, roomCode: data.roomCode || roomId,
+              workspaceName: data.workspaceName || data.title || 'Collaborative Workspace',
+              title: data.title || data.workspaceName || '', workspaceType: wsType,
+              privacy: data.privacy || 'public', participantLimit: data.participantLimit || typeDef.defaultLimit,
+              creatorId, creatorRole, defaultRole: typeDef.participantRole, ownerName: data.ownerName || '',
+              participants: data.participants || {}, status, codeModeOpen: data.codeModeOpen === true,
+              codeModeOpenedBy: data.codeModeOpenedBy || '',
+              codeModeOpenedAt: data.codeModeOpenedAt?.toDate?.()?.getTime() || undefined,
+              label: data.label || '', createdAt: data.createdAt?.toDate?.()?.getTime() || Date.now(),
+              updatedAt: data.updatedAt?.toDate?.()?.getTime() || Date.now()
+            }));
             localStorage.setItem(`livepad_local_room_${roomId}`, data.content || '');
             if (data.title || data.workspaceName) {
               localStorage.setItem(`livepad_local_room_title_${roomId}`, data.title || data.workspaceName);
@@ -576,6 +639,7 @@ export function useLiveRoom(roomId: string | null, userName: string) {
         }
       }
       const savedRoomText = savedRawRoomText;
+      const localMeta = readLocalRoomMeta(roomId) || {};
       const localLabelKey = `livepad_local_room_label_${roomId}`;
       const savedLabelText = localStorage.getItem(localLabelKey) || '';
       const localTitleKey = `livepad_local_room_title_${roomId}`;
@@ -590,38 +654,47 @@ export function useLiveRoom(roomId: string | null, userName: string) {
       const initialHistoryList: HistoryEntry[] = savedLocalHistory ? JSON.parse(savedLocalHistory) : [];
       setHistory(initialHistoryList);
 
+      const creatorId = String(localMeta.creatorId || '');
+      const isCreator = creatorId === uid || (!creatorId && !localMeta.createdBy);
+      const workspaceType = (localMeta.workspaceType || 'team') as WorkspaceType;
+      const typeDef = WORKSPACE_TYPES[workspaceType] || WORKSPACE_TYPES.team;
+      const assignedRole: WorkspaceRole = isCreator
+        ? ((localMeta.creatorRole || typeDef.creatorRole) as WorkspaceRole)
+        : ((localMeta.defaultRole || typeDef.participantRole) as WorkspaceRole);
       const initialUsers: Record<string, UserPresence> = {};
       initialUsers[uid] = {
         uid,
-        name: userName || 'Anonymous Writer',
+        name: userName || 'Unnamed participant',
         joinedAt: Date.now(),
         color: userColorLocal,
         isOnline: true,
         lastActive: Date.now(),
+        role: assignedRole,
       };
+
+      const storedParticipants = localMeta.participants && typeof localMeta.participants === 'object' ? localMeta.participants : {};
+      const initialParticipants: Record<string, WorkspaceParticipant> = { ...storedParticipants, [uid]: {
+        uid,
+        name: userName || 'Unnamed participant',
+        role: assignedRole,
+        joinedAt: Date.now(),
+        color: userColorLocal,
+        isOnline: true,
+        lastActive: Date.now()
+      }};
 
       const initialRoom: NoteRoom = {
         id: roomId,
-        workspaceId: roomId,
+        workspaceId: localMeta.workspaceId || roomId,
         roomCode: roomId,
-        workspaceType: 'team',
-        workspaceName: savedTitleText || 'Collaborative Workspace',
-        creatorId: uid,
-        creatorRole: 'admin',
-        status: 'active',
-        privacy: 'public',
-        participantLimit: 50,
-        participants: {
-          [uid]: {
-            uid,
-            name: userName || 'Anonymous Writer',
-            role: 'admin',
-            joinedAt: Date.now(),
-            color: userColorLocal,
-            isOnline: true,
-            lastActive: Date.now()
-          }
-        },
+        workspaceType,
+        workspaceName: savedTitleText || localMeta.workspaceName || 'Collaborative Workspace',
+        creatorId: creatorId || uid,
+        creatorRole: (localMeta.creatorRole || typeDef.creatorRole) as WorkspaceRole,
+        status: (localMeta.status || 'active') as WorkspaceStatus,
+        privacy: (localMeta.privacy || 'public') as WorkspacePrivacy,
+        participantLimit: Number(localMeta.participantLimit || typeDef.defaultLimit),
+        participants: initialParticipants,
         permissions: {
           allowGuestEdit: true,
           allowChat: true,
@@ -630,9 +703,11 @@ export function useLiveRoom(roomId: string | null, userName: string) {
         content: savedRoomText,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        title: savedTitleText,
-        label: savedLabelText,
-        codeModeOpen: false,
+        title: savedTitleText || localMeta.title || '',
+        label: savedLabelText || localMeta.label || '',
+        codeModeOpen: localMeta.codeModeOpen === true,
+        codeModeOpenedBy: localMeta.codeModeOpenedBy || '',
+        codeModeOpenedAt: typeof localMeta.codeModeOpenedAt === 'number' ? localMeta.codeModeOpenedAt : undefined,
         users: initialUsers,
         typingUsers: {},
         attachments: initialAttachments,
@@ -1383,6 +1458,15 @@ export function useLiveRoom(roomId: string | null, userName: string) {
       }
     }
     if (channelRef.current) {
+      try {
+        const meta = readLocalRoomMeta(roomId) || {};
+        localStorage.setItem(localRoomMetaKey(roomId), JSON.stringify({
+          ...meta,
+          codeModeOpen: open,
+          codeModeOpenedBy: uid,
+          codeModeOpenedAt: openedAt,
+        }));
+      } catch {}
       channelRef.current.postMessage({
         type: 'code_mode',
         senderUid: uid,

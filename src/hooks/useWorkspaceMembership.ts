@@ -4,8 +4,16 @@ import { db } from '../lib/firebase';
 import type { NoteRoom, WorkspaceRole } from '../types';
 
 interface Options { roomId: string | null; uid: string; useFirebase: boolean; setRoom: Dispatch<SetStateAction<NoteRoom | null>>; }
+interface WorkspaceMembershipResult {
+  archiveWorkspace: () => Promise<void>;
+  restoreWorkspace: () => Promise<void>;
+  deleteWorkspace: () => Promise<void>;
+  updateParticipantRole: (targetUid: string, newRole: WorkspaceRole) => Promise<void>;
+  removeParticipant: (targetUid: string) => Promise<void>;
+  transferOwnership: (newOwnerUid: string) => Promise<void>;
+}
 
-export function useWorkspaceMembership({ roomId, uid, useFirebase, setRoom }: Options) {
+export function useWorkspaceMembership({ roomId, uid, useFirebase, setRoom }: Options): WorkspaceMembershipResult {
   const archiveWorkspace = useCallback(async () => {
     if (!roomId) return;
     if (useFirebase && db) await updateDoc(doc(db, 'rooms', roomId), { status: 'archived', archivedAt: serverTimestamp() });
@@ -21,7 +29,7 @@ export function useWorkspaceMembership({ roomId, uid, useFirebase, setRoom }: Op
   const deleteWorkspace = useCallback(async () => {
     if (!roomId) return;
     if (useFirebase && db) await deleteDoc(doc(db, 'rooms', roomId));
-    for (const key of [`livepad_local_room_${roomId}`, `livepad_local_room_title_${roomId}`, `livepad_local_room_label_${roomId}`, `livepad_local_room_attachments_${roomId}`, `livepad_local_room_history_${roomId}`, `livepad_room_status_${roomId}`]) localStorage.removeItem(key);
+    for (const key of [`livepad_local_room_${roomId}`, `livepad_local_room_title_${roomId}`, `livepad_local_room_label_${roomId}`, `livepad_local_room_attachments_${roomId}`, `livepad_local_room_history_${roomId}`, `livepad_room_status_${roomId}`, `livepad_local_room_meta_${roomId}`]) localStorage.removeItem(key);
     try {
       const recentsStr = localStorage.getItem('livepad_recent_workspaces');
       if (recentsStr) {

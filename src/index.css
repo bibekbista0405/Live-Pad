@@ -922,3 +922,85 @@ input[type="range"]::-moz-range-thumb {
 .livepad-chat-panel .group:hover .opacity-0 {
   opacity: 1;
 }
+
+/* Pass 7 smooth landing surface: scrolling must not animate/scale controls.
+   Keep interaction feedback on color/border only so hover recalculation does not
+   move buttons while the main page is being scrolled. */
+.livepad-landing-shell {
+  contain: layout paint style;
+  isolation: isolate;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+}
+.livepad-landing-shell .backdrop-blur-md,
+.livepad-landing-shell .backdrop-blur-xl,
+.livepad-landing-shell .backdrop-blur-sm {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.livepad-landing-shell .livepad-landing-panel,
+.livepad-landing-shell .livepad-landing-card {
+  transform: none !important;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease !important;
+}
+.livepad-landing-shell .livepad-landing-panel:hover,
+.livepad-landing-shell .livepad-landing-card:hover {
+  transform: none !important;
+}
+.livepad-landing-shell button,
+.livepad-landing-shell a {
+  transform: none !important;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease !important;
+}
+.livepad-landing-shell .animate-pulse,
+.livepad-landing-shell .animate-bounce,
+.livepad-landing-shell .animate-ping {
+  animation: none !important;
+}
+@media (max-width: 900px) {
+  .livepad-bg-orb { animation: none !important; }
+}
+
+/* Pass 7 scroll stability: the landing page is a static product surface, so
+   keep it on one compositor layer and avoid hover transforms/shadow churn. */
+.livepad-landing-shell {
+  contain: layout paint style;
+  isolation: isolate;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.livepad-landing-shell .livepad-landing-panel,
+.livepad-landing-shell .livepad-landing-card {
+  transform: none !important;
+  transition: border-color 140ms ease, background-color 140ms ease !important;
+  box-shadow: 0 8px 28px rgba(15,23,42,.05) !important;
+}
+.livepad-landing-shell .livepad-landing-panel:hover,
+.livepad-landing-shell .livepad-landing-card:hover {
+  transform: none !important;
+  box-shadow: 0 8px 28px rgba(15,23,42,.05) !important;
+}
+.livepad-landing-shell .backdrop-blur-sm,
+.livepad-landing-shell .backdrop-blur-md,
+.livepad-landing-shell .backdrop-blur-xl {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.livepad-landing-shell button,
+.livepad-landing-shell a {
+  transform: none !important;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease !important;
+}
+.livepad-landing-shell .animate-pulse,
+.livepad-landing-shell .animate-bounce,
+.livepad-landing-shell .animate-ping {
+  animation: none !important;
+}
+
+/* Pass 7: remove large animated blur layers from the main background. The
+   landing surface keeps its grid/gradient but avoids GPU-heavy blur animation
+   during scroll. */
+.livepad-background .livepad-bg-orb {
+  display: none !important;
+}

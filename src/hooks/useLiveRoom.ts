@@ -627,30 +627,30 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
       const localRoomKey = `livepad_local_room_${roomId}`;
       let savedRawRoomText = localStorage.getItem(localRoomKey);
       let serverRoom: Record<string, any> | null = null;
-      if (savedRawRoomText === null) {
-        // First try the server-backed room registry. This is the cross-browser
-        // fallback used when Firebase Auth is unavailable.
-        try {
-          const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`);
-          if (response.ok) {
-            const payload = await response.json();
-            serverRoom = payload?.room && typeof payload.room === 'object' ? payload.room : null;
-            if (serverRoom) {
-              savedRawRoomText = typeof serverRoom.content === 'string' ? serverRoom.content : '';
-              try {
-                localStorage.setItem(localRoomKey, savedRawRoomText);
-                localStorage.setItem(localRoomMetaKey(roomId), JSON.stringify(serverRoom));
-                if (serverRoom.title || serverRoom.workspaceName) {
-                  localStorage.setItem(`livepad_local_room_title_${roomId}`, serverRoom.title || serverRoom.workspaceName);
-                }
-              } catch {}
-            }
+      // Always ask the server registry first. A stale local cache must never
+      // prevent a second browser from receiving the current room state.
+      try {
+        const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`);
+        if (response.ok) {
+          const payload = await response.json();
+          serverRoom = payload?.room && typeof payload.room === 'object' ? payload.room : null;
+          if (serverRoom) {
+            savedRawRoomText = typeof serverRoom.content === 'string' ? serverRoom.content : (savedRawRoomText ?? '');
+            try {
+              localStorage.setItem(localRoomKey, savedRawRoomText);
+              localStorage.setItem(localRoomMetaKey(roomId), JSON.stringify(serverRoom));
+              if (serverRoom.title || serverRoom.workspaceName) {
+                localStorage.setItem(`livepad_local_room_title_${roomId}`, serverRoom.title || serverRoom.workspaceName);
+              }
+              if (serverRoom.label) localStorage.setItem(`livepad_local_room_label_${roomId}`, serverRoom.label);
+            } catch {}
           }
-        } catch (serverErr) {
-          console.warn('[LivePad Room] Server fallback lookup unavailable.', serverErr);
         }
-        if (fallbackDisposed) return;
-        if (savedRawRoomText === null) {
+      } catch (serverErr) {
+        console.warn('[LivePad Room] Server fallback lookup unavailable.', serverErr);
+      }
+      if (fallbackDisposed) return;
+      if (savedRawRoomText === null) {
           // Final fallback: recent workspaces / library cache in PWA storage.
           const recents = getRecentWorkspaces();
           const found = recents.find((r) => r.code === roomId || r.id === roomId);
@@ -666,7 +666,6 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
             return;
           }
         }
-      }
       const savedRoomText = savedRawRoomText;
       const localMeta = readLocalRoomMeta(roomId) || {};
       const localLabelKey = `livepad_local_room_label_${roomId}`;
@@ -731,12 +730,12 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
         },
         content: savedRoomText,
         createdAt: Date.now(),
-        updatedAt: Date.now(),
-        title: savedTitleText || localMeta.title || '',
-        label: savedLabelText || localMeta.label || '',
-        codeModeOpen: localMeta.codeModeOpen === true,
-        codeModeOpenedBy: localMeta.codeModeOpenedBy || '',
-        codeModeOpenedAt: typeof localMeta.codeModeOpenedAt === 'number' ? localMeta.codeModeOpenedAt : undefined,
+        updatedAt: Number(serverRoom?.updatedAt || localMeta.updatedAt || Date.now()),
+        title: savedTitleText || serverRoom?.title || localMeta.title || '',
+        label: savedLabelText || serverRoom?.label || localMeta.label || '',
+        codeModeOpen: serverRoom?.codeModeOpen === true || localMeta.codeModeOpen === true,
+        codeModeOpenedBy: serverRoom?.codeModeOpenedBy || localMeta.codeModeOpenedBy || '',
+        codeModeOpenedAt: typeof serverRoom?.codeModeOpenedAt === 'number' ? serverRoom.codeModeOpenedAt : (typeof localMeta.codeModeOpenedAt === 'number' ? localMeta.codeModeOpenedAt : undefined),
         users: initialUsers,
         typingUsers: {},
         attachments: initialAttachments,
@@ -931,6 +930,19 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
         
         const latestLabel = localStorage.getItem(`livepad_local_room_label_${roomId}`) || '';
 
+        if (serverSyncEnabled) {
+          void fetch(`/api/rooms/${encodeURIComponent(roomId)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              users: { [uid]: userPresenceStateObj },
+              participants: { [uid]: { uid, name: userPresenceStateObj.name, role: assignedRole, joinedAt: userPresenceStateObj.joinedAt, color: userColorLocal, isOnline: true, lastActive: userPresenceStateObj.lastActive } },
+              typingUsers: { [uid]: !!(roomRef.current?.typingUsers?.[uid]) },
+              updatedAt: Date.now(),
+            }),
+          }).catch(() => {});
+        }
+
         channel.postMessage({
           type: 'heartbeat',
           senderUid: uid,
@@ -965,8 +977,8 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
         clearInterval(heartbeatTimer);
         if (serverSyncTimer) clearInterval(serverSyncTimer);
       };
-      };
 
+      };
       void initializeLocalFallback();
 
       return () => {

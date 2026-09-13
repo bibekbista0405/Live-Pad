@@ -523,23 +523,10 @@ function RichTextEditorComponent({
     }
 
     if (editor.isFocused) {
-      isUpdatingRef.current = true;
-      const { from, to } = editor.state.selection;
-      const oldDocSize = editor.state.doc.content.size;
-
-      editor.commands.setContent(formattedTarget, { emitUpdate: false } as any);
-
-      const newDocSize = editor.state.doc.content.size;
-      const sizeDelta = newDocSize - oldDocSize;
-
-      try {
-        const targetFrom = Math.max(1, Math.min(from + (sizeDelta > 0 ? sizeDelta : 0), newDocSize - 1));
-        const targetTo = Math.max(1, Math.min(to + (sizeDelta > 0 ? sizeDelta : 0), newDocSize - 1));
-        editor.commands.setTextSelection({ from: targetFrom, to: targetTo });
-      } catch {
-        // Fallback to end of document if selection offset failed
-      }
-      isUpdatingRef.current = false;
+      // Do not rebuild the entire ProseMirror document while the user is typing.
+      // Parent state can lag a realtime snapshot by a few milliseconds; replacing
+      // the document here causes cursor jumps, lost selections and duplicate input.
+      // Remote updates are applied only when the editor is idle/blurred.
       return;
     }
 

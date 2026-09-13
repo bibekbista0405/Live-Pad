@@ -4,7 +4,7 @@ import { getAuth } from 'firebase-admin/auth';
 
 const MAX_JSON_BYTES = 5 * 1024 * 1024;
 const WINDOW_MS = 60_000;
-const MAX_REQUESTS = 60;
+const MAX_REQUESTS = 180;
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
 function getClientKey(req: Request) {

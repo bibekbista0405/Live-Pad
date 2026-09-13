@@ -111,24 +111,37 @@ export function ChatPanel({
 
     const mergeMessages = (incoming: ChatMessage[]) => {
       setMessages((current) => {
-        const map = new Map(current.map((item) => [item.id, item]));
+        const map = new Map<string, ChatMessage>(current.map((item) => [item.id, item]));
         incoming.forEach((item) => map.set(item.id, item));
         return [...map.values()].sort((a, b) => a.timestamp - b.timestamp).slice(-200);
       });
     };
 
     if (!cloudChatEnabled) {
-      // Local/BroadcastChannel transport is intentional when Firebase Auth is not
-      // available. This keeps same-browser study rooms usable without pretending that
-      // unauthenticated clients can write to Firestore security rules.
+      // Public-room server transport keeps chat realtime across different browsers
+      // when Firebase Auth is unavailable. BroadcastChannel remains the fast same-tab path.
       mergeMessages(readLocalMessages());
+      const loadServerMessages = async () => {
+        try {
+          const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`);
+          if (!response.ok) return;
+          const payload = await response.json();
+          if (Array.isArray(payload?.messages)) {
+            mergeMessages(payload.messages as ChatMessage[]);
+            payload.messages.forEach((message: ChatMessage) => persistLocalMessage(message));
+            setChatError(null);
+          }
+        } catch {}
+      };
+      void loadServerMessages();
+      const pollTimer = setInterval(() => { void loadServerMessages(); }, 1000);
       if (typeof BroadcastChannel !== 'undefined') {
         const channel = new BroadcastChannel(`livepad-chat:${roomId}`);
         localChannelRef.current = channel;
         channel.onmessage = (event) => {
           if (event.data?.type === 'chat-delete' && event.data.id) {
             const id = String(event.data.id);
-            try { localStorage.setItem(localStorageKey, JSON.stringify(readLocalMessages().filter((item) => item.id !== id))); } catch {}
+            try { localStorage.setItem(localStorageKey, JSON.stringify(readLocalMessages().filter((item: ChatMessage) => item.id !== id))); } catch {}
             setMessages((current) => current.filter((item) => item.id !== id));
             return;
           }
@@ -138,9 +151,9 @@ export function ChatPanel({
             mergeMessages([message]);
           }
         };
-        return () => { channel.close(); localChannelRef.current = null; };
+        return () => { channel.close(); localChannelRef.current = null; clearInterval(pollTimer); };
       }
-      return;
+      return () => { clearInterval(pollTimer); };
     }
 
     const ref = collection(db, 'rooms', roomId, 'messages');
@@ -220,6 +233,12 @@ export function ChatPanel({
     setMessages((prev) => prev.some((item) => item.id === clientKey) ? prev : [...prev, optimistic]);
     try {
       if (!cloudChatEnabled) {
+        try {
+          const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(optimistic) });
+          if (!response.ok) throw new Error('server-chat-unavailable');
+        } catch {
+          // Same-browser fallback still works if the server is temporarily unavailable.
+        }
         persistLocalMessage(optimistic);
         localChannelRef.current?.postMessage({ type: 'chat-message', message: optimistic });
         setChatError(null);
@@ -249,6 +268,7 @@ export function ChatPanel({
     if (!roomId || !clean || message.senderUid !== currentUid) return;
     if (!cloudChatEnabled) {
       const updated = { ...message, text: clean, isEdited: true, editedAt: Date.now() };
+      try { await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(message.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }); } catch {}
       persistLocalMessage(updated); setMessages((prev) => prev.map((item) => item.id === message.id ? updated : item));
       localChannelRef.current?.postMessage({ type: 'chat-message', message: updated });
       setEditingId(null); setEditingText(''); return;
@@ -266,6 +286,7 @@ export function ChatPanel({
       const users = current[emoji] || [];
       const nextUsers = users.includes(currentUid) ? users.filter((uid) => uid !== currentUid) : [...users, currentUid];
       const updated = { ...message, reactions: { ...current, [emoji]: nextUsers } };
+      try { await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(message.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reactions: { ...current, [emoji]: nextUsers } }) }); } catch {}
       persistLocalMessage(updated); setMessages((prev) => prev.map((item) => item.id === message.id ? updated : item));
       localChannelRef.current?.postMessage({ type: 'chat-message', message: updated }); return;
     }
@@ -280,6 +301,7 @@ export function ChatPanel({
     if (!roomId || (message.senderUid !== currentUid && !['owner', 'admin'].includes(String(currentRole)))) return;
     if (!cloudChatEnabled) {
       try { localStorage.setItem(localStorageKey, JSON.stringify(readLocalMessages().filter((item) => item.id !== message.id))); } catch {}
+      try { await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(message.id)}`, { method: 'DELETE' }); } catch {}
       setMessages((prev) => prev.filter((item) => item.id !== message.id));
       localChannelRef.current?.postMessage({ type: 'chat-delete', id: message.id }); return;
     }

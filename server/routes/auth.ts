@@ -4,6 +4,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { randomUUID } from 'node:crypto';
 
 export const authRouter = Router();
+let guestAuthWarningShown = false;
 
 function ensureAdminApp() {
   if (getApps().length) return;
@@ -24,7 +25,10 @@ authRouter.post('/auth/guest-token', async (_req, res) => {
     const token = await getAuth().createCustomToken(uid, { livepadGuest: true });
     return res.json({ token });
   } catch (error) {
-    console.error('[LivePad Auth] Could not issue guest token:', error);
+    if (!guestAuthWarningShown) {
+      guestAuthWarningShown = true;
+      console.warn('[LivePad Auth] Guest cloud authentication is unavailable; public rooms will use the local server transport.');
+    }
     return res.status(503).json({ error: 'Guest cloud authentication is not configured on the server.' });
   }
 });

@@ -616,26 +616,55 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
       channelRef.current = channel;
 
       const userColorLocal = localStorage.getItem('livepad_color') || '#3b82f6';
-      
+      let fallbackDisposed = false;
+      let fallbackCleanup: (() => void) | null = () => { channel.close(); };
+
+      // The server registry lookup is asynchronous, so initialize the fallback
+      // inside an async task rather than making the React effect callback async.
+      const initializeLocalFallback = async () => {
+        if (fallbackDisposed) return;
       // Initialize room template locally
       const localRoomKey = `livepad_local_room_${roomId}`;
       let savedRawRoomText = localStorage.getItem(localRoomKey);
+      let serverRoom: Record<string, any> | null = null;
       if (savedRawRoomText === null) {
-        // Fallback: check recent workspaces / library cache in PWA storage
-        const recents = getRecentWorkspaces();
-        const found = recents.find((r) => r.code === roomId || r.id === roomId);
-        if (found) {
-          savedRawRoomText = found.snippet || '';
-          try {
-            localStorage.setItem(localRoomKey, savedRawRoomText);
-            if (found.title) {
-              localStorage.setItem(`livepad_local_room_title_${roomId}`, found.title);
+        // First try the server-backed room registry. This is the cross-browser
+        // fallback used when Firebase Auth is unavailable.
+        try {
+          const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`);
+          if (response.ok) {
+            const payload = await response.json();
+            serverRoom = payload?.room && typeof payload.room === 'object' ? payload.room : null;
+            if (serverRoom) {
+              savedRawRoomText = typeof serverRoom.content === 'string' ? serverRoom.content : '';
+              try {
+                localStorage.setItem(localRoomKey, savedRawRoomText);
+                localStorage.setItem(localRoomMetaKey(roomId), JSON.stringify(serverRoom));
+                if (serverRoom.title || serverRoom.workspaceName) {
+                  localStorage.setItem(`livepad_local_room_title_${roomId}`, serverRoom.title || serverRoom.workspaceName);
+                }
+              } catch {}
             }
-          } catch {}
-        } else {
-          setError("Room does not exist.");
-          setRoom(null);
-          return;
+          }
+        } catch (serverErr) {
+          console.warn('[LivePad Room] Server fallback lookup unavailable.', serverErr);
+        }
+        if (fallbackDisposed) return;
+        if (savedRawRoomText === null) {
+          // Final fallback: recent workspaces / library cache in PWA storage.
+          const recents = getRecentWorkspaces();
+          const found = recents.find((r) => r.code === roomId || r.id === roomId);
+          if (found) {
+            savedRawRoomText = found.snippet || '';
+            try {
+              localStorage.setItem(localRoomKey, savedRawRoomText);
+              if (found.title) localStorage.setItem(`livepad_local_room_title_${roomId}`, found.title);
+            } catch {}
+          } else {
+            setError("Room does not exist or is currently unreachable.");
+            setRoom(null);
+            return;
+          }
         }
       }
       const savedRoomText = savedRawRoomText;
@@ -713,7 +742,22 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
         attachments: initialAttachments,
       };
 
+      const serverSyncEnabled = !useFirebase;
       setRoom(initialRoom);
+
+      // Register this participant with the server fallback so a teacher and
+      // students in different browsers see the same room membership.
+      if (serverRoom || serverSyncEnabled) {
+        void fetch(`/api/rooms/${encodeURIComponent(roomId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            participants: initialParticipants,
+            users: initialUsers,
+            updatedAt: Date.now(),
+          }),
+        }).catch(() => {});
+      }
 
       // Listen for other tabs
       channel.onmessage = (event) => {
@@ -838,6 +882,41 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
         }
       });
 
+      // When Firebase Auth is unavailable, keep the room synchronized across
+      // different browsers through the local LivePad server registry. BroadcastChannel
+      // remains the lowest-latency path for tabs on the same browser.
+      const serverSyncTimer = serverSyncEnabled ? setInterval(async () => {
+        try {
+          const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`);
+          if (!response.ok) return;
+          const payload = await response.json();
+          const remote = payload?.room;
+          if (!remote) return;
+          setRoom(prev => {
+            if (!prev) return prev;
+            const remoteUpdated = Number(remote.updatedAt || 0);
+            if (remoteUpdated <= Number(prev.updatedAt || 0)) return prev;
+            if (remote.content !== undefined && remote.content !== prev.content) {
+              lastSyncedContentRef.current = remote.content || '';
+            }
+            return {
+              ...prev,
+              content: remote.content !== undefined ? remote.content : prev.content,
+              title: remote.title || remote.workspaceName || prev.title,
+              label: remote.label ?? prev.label,
+              codeModeOpen: remote.codeModeOpen === true,
+              codeModeOpenedBy: remote.codeModeOpenedBy || prev.codeModeOpenedBy,
+              codeModeOpenedAt: typeof remote.codeModeOpenedAt === 'number' ? remote.codeModeOpenedAt : prev.codeModeOpenedAt,
+              participants: remote.participants && typeof remote.participants === 'object' ? remote.participants : prev.participants,
+              users: remote.users && typeof remote.users === 'object' ? remote.users : prev.users,
+              typingUsers: remote.typingUsers && typeof remote.typingUsers === 'object' ? remote.typingUsers : prev.typingUsers,
+              updatedAt: remoteUpdated,
+            };
+          });
+          try { localStorage.setItem(localRoomKey, typeof remote.content === 'string' ? remote.content : ''); } catch {}
+        } catch {}
+      }, 1000) : null;
+
       // Broadcast heartbeat pulse to keep presence alive in browser tabs
       const heartbeatTimer = setInterval(() => {
         const userPresenceStateObj = {
@@ -881,9 +960,18 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
         });
       }, 5000);
 
-      return () => {
+      fallbackCleanup = () => {
         channel.close();
         clearInterval(heartbeatTimer);
+        if (serverSyncTimer) clearInterval(serverSyncTimer);
+      };
+      };
+
+      void initializeLocalFallback();
+
+      return () => {
+        fallbackDisposed = true;
+        fallbackCleanup?.();
       };
     }
   }, [roomId, uid, useFirebase, refreshKey]);
@@ -950,6 +1038,16 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
       // Local Sync
       const localRoomKey = `livepad_local_room_${roomId}`;
       localStorage.setItem(localRoomKey, text);
+
+      // Cross-browser fallback: persist public room content through the LivePad
+      // server when Firebase Auth is unavailable. This path never writes Firestore.
+      try {
+        await fetch(`/api/rooms/${encodeURIComponent(roomId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: text, updatedAt: Date.now(), lastClientId: clientIdRef.current, lastTxId: txId }),
+        });
+      } catch {}
       
       if (channelRef.current) {
         channelRef.current.postMessage({
@@ -1154,9 +1252,10 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
         setSyncStatus('error');
       }
     } else {
-      // Local Sync
+      // Local/server fallback sync
       const localLabelKey = `livepad_local_room_label_${roomId}`;
       localStorage.setItem(localLabelKey, newLabel);
+      void fetch(`/api/rooms/${encodeURIComponent(roomId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: newLabel, updatedAt: Date.now() }) }).catch(() => {});
       
       if (channelRef.current) {
         channelRef.current.postMessage({
@@ -1197,9 +1296,10 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
         setSyncStatus('error');
       }
     } else {
-      // Local Sync
+      // Local/server fallback sync
       const localTitleKey = `livepad_local_room_title_${roomId}`;
       localStorage.setItem(localTitleKey, newTitle);
+      void fetch(`/api/rooms/${encodeURIComponent(roomId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: newTitle, updatedAt: Date.now() }) }).catch(() => {});
       
       if (channelRef.current) {
         channelRef.current.postMessage({
@@ -1467,6 +1567,11 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
           codeModeOpenedAt: openedAt,
         }));
       } catch {}
+      void fetch(`/api/rooms/${encodeURIComponent(roomId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codeModeOpen: open, codeModeOpenedBy: uid, codeModeOpenedAt: openedAt, updatedAt: Date.now() }),
+      }).catch(() => {});
       channelRef.current.postMessage({
         type: 'code_mode',
         senderUid: uid,

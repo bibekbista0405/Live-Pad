@@ -1510,6 +1510,17 @@ export default function App() {
             const localMeta = rawMeta ? JSON.parse(rawMeta) : null;
             if (localMeta && typeof localMeta === 'object') { roomExists = true; roomData = localMeta; }
           } catch {}
+          if (!roomExists) {
+            try {
+              const response = await fetch(`/api/rooms/${encodeURIComponent(cleanCode)}`);
+              if (response.ok) {
+                const payload = await response.json();
+                if (payload?.room) { roomExists = true; roomData = payload.room; }
+              }
+            } catch (serverErr) {
+              console.warn('[handleNavigateRoom] Server room lookup unavailable.', serverErr);
+            }
+          }
         } else {
           const docRef = doc(db, 'rooms', cleanCode);
         let docSnap = await getDoc(docRef);
@@ -1549,7 +1560,18 @@ export default function App() {
           }
         } catch {}
         if (!roomExists) {
-          addToast('error', 'Cloud collaboration is unavailable on this device. Please enable a Firebase sign-in provider or use the LivePad server guest-auth setup.');
+          try {
+            const response = await fetch(`/api/rooms/${encodeURIComponent(cleanCode)}`);
+            if (response.ok) {
+              const payload = await response.json();
+              if (payload?.room) { roomExists = true; roomData = payload.room; }
+            }
+          } catch (serverErr) {
+            console.warn('[handleNavigateRoom] Server room lookup unavailable after cloud error.', serverErr);
+          }
+        }
+        if (!roomExists) {
+          addToast('error', `Workspace "${cleanCode}" could not be reached. The room may be offline or unavailable.`);
           return false;
         }
       }
@@ -3852,9 +3874,40 @@ console.warn("Verify your variables before deployment!");
         }
       }
 
+      // Register public workspaces with the LivePad server fallback as well. This
+      // makes a room created in one browser discoverable from another browser when
+      // Firebase Auth is unavailable, without weakening Firestore security rules.
+      try {
+        await fetch('/api/rooms/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspaceId: uniqueCode,
+            roomCode: uniqueCode,
+            workspaceType: wsType,
+            workspaceName: wsName,
+            title: wsName,
+            creatorId: currentUid,
+            creatorRole: 'owner',
+            ownerName: finalName,
+            status: 'active',
+            privacy: selectedPrivacy || 'public',
+            participantLimit: limit,
+            defaultRole: wsType === 'teaching' ? 'student' : 'member',
+            participants: { [currentUid]: { uid: currentUid, name: finalName, role: 'owner', joinedAt: Date.now(), color: userColorLocal, isOnline: true, lastActive: Date.now() } },
+            users: { [currentUid]: { uid: currentUid, name: finalName, role: 'owner', joinedAt: Date.now(), color: userColorLocal, isOnline: true, lastActive: Date.now() } },
+            content: welcomeContent,
+            codeModeOpen: false,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          }),
+        });
+      } catch (serverErr) {
+        console.warn('[LivePad Room] Server fallback registration unavailable.', serverErr);
+      }
+
       // Keep a complete local room descriptor so another tab can join the same
-      // room when Firebase Authentication is unavailable. Cloud multi-device
-      // collaboration still requires a real Firebase-authenticated user.
+      // room when Firebase Authentication is unavailable.
       try {
         localStorage.setItem(`livepad_local_room_${uniqueCode}`, welcomeContent);
         localStorage.setItem(`livepad_local_room_meta_${uniqueCode}`, JSON.stringify({

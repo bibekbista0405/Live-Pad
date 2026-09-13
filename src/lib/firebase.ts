@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, User } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -70,8 +70,29 @@ export function ensureAuth(): Promise<User | null> {
             unsub();
             resolve(cred.user);
           } catch (err) {
-            // A disabled Anonymous provider is a configuration state, not a transient
-            // network failure. Cache it so every component does not spam signUp requests.
+            // Anonymous Auth is often disabled on Firebase projects. Ask the
+            // LivePad server for a pseudonymous Firebase custom-token identity.
+            // Firestore rules remain fully authenticated; the room code is not
+            // used as an authorization secret.
+            try {
+              const response = await fetch('/api/auth/guest-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+              });
+              if (response.ok) {
+                const payload = await response.json();
+                if (payload?.token) {
+                  const credential = await signInWithCustomToken(auth, payload.token);
+                  unsub();
+                  resolve(credential.user);
+                  return;
+                }
+              }
+            } catch (guestErr) {
+              console.warn('[LivePad Auth] Guest cloud authentication is unavailable; using local transport.', guestErr);
+            }
+
             anonymousAuthUnavailable = true;
             try { localStorage.setItem(ANONYMOUS_AUTH_CACHE_KEY, String(Date.now() + ANONYMOUS_AUTH_CACHE_MS)); } catch {}
             unsub();

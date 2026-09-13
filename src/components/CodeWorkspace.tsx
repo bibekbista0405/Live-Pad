@@ -1890,7 +1890,7 @@ export default function CodeWorkspace({
         className="livepad-code-shell fixed inset-0 z-50 flex flex-col h-screen w-screen overflow-hidden select-none" data-learning-role={isTeachingSession && !canControlCodeMode ? 'student' : 'teacher'}
       >
         {/* Top Workspace Header Bar (Code Studio title bar) */}
-        <header className="livepad-code-titlebar h-12 px-3 sm:px-4 flex items-center justify-between shrink-0 z-30 text-xs">
+        <header className="livepad-code-titlebar px-3 sm:px-4 grid grid-cols-[1fr_auto_1fr] items-center shrink-0 z-30 text-xs">
           {/* Left: Window controls & Menu Bar */}
           <div className="flex items-center gap-2 min-w-0">
             {(!isTeachingSession || canControlCodeMode) && (
@@ -1914,45 +1914,36 @@ export default function CodeWorkspace({
             </div>
           </div>
 
-          {/* Middle: Active Project Title */}
-          <div className="flex items-center gap-2">
+          {/* Center: active learning project — intentionally not a floating box. */}
+          <div className="min-w-0 flex items-center justify-center px-3">
             {(!isTeachingSession || canControlCodeMode) ? (
               <button
                 type="button"
                 onClick={() => setIsProjectModalOpen(true)}
-                className="livepad-code-project-switch flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-medium min-w-0 cursor-pointer"
+                className="livepad-code-project-title flex items-center gap-2 min-w-0 max-w-[300px] cursor-pointer"
                 title="Switch or create projects"
               >
-                <img src="/brand/livepad-icon-192.png" alt="" className="w-5 h-5 rounded-md shrink-0" />
-                <span className="hidden sm:inline text-white/50">Project</span>
-                <span className="font-medium max-w-[180px] truncate text-white">{activeProject.name}</span>
-                <ChevronDown className="w-3 h-3 text-[#9aa8ba]" />
+                <Code2 className="w-4 h-4 shrink-0 text-cyan-300" />
+                <span className="max-w-[220px] truncate font-semibold text-white/90">{activeProject.name}</span>
+                <ChevronDown className="w-3 h-3 shrink-0 text-white/35" />
               </button>
             ) : (
-              <div className="livepad-code-project-readonly" aria-label={`Teacher managed project: ${activeProject.name}`}>
-                <img src="/brand/livepad-icon-192.png" alt="" className="w-5 h-5 rounded-md shrink-0" />
-                <span className="text-[10px] uppercase tracking-[.08em] text-white/35">Class project</span>
-                <span className="max-w-[180px] truncate text-xs font-semibold text-white/80">{activeProject.name}</span>
+              <div className="livepad-code-project-title flex items-center gap-2 min-w-0 max-w-[300px]" aria-label={`Teacher managed project: ${activeProject.name}`}>
+                <Code2 className="w-4 h-4 shrink-0 text-cyan-300" />
+                <span className="max-w-[220px] truncate font-semibold text-white/90">{activeProject.name}</span>
               </div>
             )}
           </div>
 
-          {/* Session context: keep the learning model visible without adding another control surface. */}
-          {isTeachingSession && (
-            <div className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-semibold ${
-                canControlCodeMode
-                  ? 'border-indigo-400/20 bg-indigo-400/10 text-indigo-200'
-                  : 'border-cyan-400/20 bg-cyan-400/10 text-cyan-200'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${canControlCodeMode ? 'bg-indigo-300' : 'bg-cyan-300'}`} />
-                {canControlCodeMode ? 'Teacher' : 'Student'} · {activeUsers.length} learning
-              </span>
-            </div>
-          )}
 
           {/* Right: Actions & Panel Controls */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center justify-end gap-1 min-w-0">
+            {isTeachingSession && (
+              <span className="hidden xl:inline-flex items-center gap-1.5 px-2 mr-1 text-[10px] font-medium text-white/45 whitespace-nowrap">
+                <span className={`w-1.5 h-1.5 rounded-full ${canControlCodeMode ? 'bg-indigo-300' : 'bg-cyan-300'}`} />
+                {canControlCodeMode ? 'Teacher' : 'Student'} · {activeUsers.length}
+              </span>
+            )}
             {isTeachingSession && canControlCodeMode && onRequestCodeMode && (
               <button
                 type="button"

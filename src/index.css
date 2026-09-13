@@ -1004,3 +1004,23 @@ input[type="range"]::-moz-range-thumb {
 .livepad-background .livepad-bg-orb {
   display: none !important;
 }
+
+/* Pass 8: keep the home surface visually stable while scrolling. */
+.livepad-landing-shell {
+  contain: layout style;
+  transform: translateZ(0);
+}
+.livepad-landing-shell > .livepad-deferred-surface {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 520px;
+}
+.livepad-landing-shell .transition-all {
+  transition-property: color, background-color, border-color, opacity !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .livepad-landing-shell .animate-pulse,
+  .livepad-landing-shell .animate-bounce,
+  .livepad-landing-shell .animate-ping {
+    animation: none !important;
+  }
+}

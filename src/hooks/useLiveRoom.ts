@@ -328,9 +328,9 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
         const status = (data.status as WorkspaceStatus) || 'active';
         setWorkspaceStatus(status);
         if (status !== 'active') {
+          // Keep the room descriptor in state so clients can react immediately
+          // to a teacher ending a session while preserving the saved workspace.
           setError(`Workspace is currently ${status} and cannot be edited.`);
-          setRoom(null);
-          return;
         }
 
         const wsType: WorkspaceType = data.workspaceType || 'team';

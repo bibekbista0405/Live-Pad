@@ -236,9 +236,19 @@ input[type="range"]::-moz-range-thumb {
 
 /* Tiptap ProseMirror Rich Text Editor Styles */
 .ProseMirror {
-  outline: none;
+  outline: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
   min-height: 450px;
   height: 100%;
+}
+
+.ProseMirror:focus,
+.ProseMirror:focus-visible,
+.ProseMirror[contenteditable="true"]:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
@@ -1023,4 +1033,67 @@ input[type="range"]::-moz-range-thumb {
   .livepad-landing-shell .animate-ping {
     animation: none !important;
   }
+}
+
+/* Code Studio desktop/PWA surface ------------------------------------------------ */
+.livepad-code-shell {
+  --code-titlebar-h: 54px;
+  --code-rail-w: 52px;
+  --code-sidebar-w: 280px;
+  background: #0b0d10;
+  color-scheme: dark;
+}
+.livepad-code-titlebar {
+  min-height: var(--code-titlebar-h);
+  height: var(--code-titlebar-h);
+  background: #101318;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.livepad-code-body {
+  min-width: 0;
+  background: #0b0d10;
+}
+.livepad-code-sidebar {
+  width: var(--code-sidebar-w);
+  min-width: var(--code-sidebar-w);
+  background: #0e1116;
+  border-color: rgba(255,255,255,.08) !important;
+}
+.livepad-code-titlebar button,
+.livepad-code-titlebar [role="button"] {
+  -webkit-app-region: no-drag;
+}
+@media (display-mode: standalone) {
+  .livepad-code-titlebar {
+    padding-top: env(safe-area-inset-top);
+    height: calc(var(--code-titlebar-h) + env(safe-area-inset-top));
+  }
+}
+@media (min-width: 1400px) {
+  .livepad-code-titlebar { padding-left: 18px; padding-right: 18px; }
+  .livepad-code-sidebar { width: 300px; min-width: 300px; }
+}
+@media (max-width: 900px) {
+  .livepad-code-titlebar {
+    grid-template-columns: auto 1fr auto !important;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .livepad-code-titlebar .livepad-code-project-title { max-width: 190px; }
+  .livepad-code-titlebar .livepad-code-project-title span { max-width: 130px; }
+  .livepad-code-titlebar .livepad-code-run-btn span { display: none; }
+  .livepad-code-sidebar { width: 260px; min-width: 260px; }
+}
+@media (max-width: 640px) {
+  .livepad-code-titlebar { gap: 4px; }
+  .livepad-code-titlebar .livepad-code-titlebar-label { display: none; }
+  .livepad-code-titlebar .livepad-code-project-title { max-width: 150px; }
+  .livepad-code-sidebar { position: absolute; inset: 0 auto 0 0; z-index: 40; width: min(86vw, 300px); min-width: min(86vw, 300px); box-shadow: 18px 0 40px rgba(0,0,0,.35); }
+  .livepad-code-body { isolation: isolate; }
+}
+@media (min-width: 901px) {
+  .livepad-code-shell:fullscreen { border-radius: 0; }
+}
+@media (pointer: coarse) {
+  .livepad-code-titlebar button { min-height: 40px; }
 }

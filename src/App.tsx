@@ -2606,6 +2606,34 @@ export default function App() {
   const classroomRole = isTeachingSession ? (isTeacher ? 'teacher' : 'student') : 'standard';
   const canControlCodeMode = isTeacher && Boolean(roomCode);
 
+  // Ending/archiving a teaching session is a room-level lifecycle event.
+  // Students leave the live workspace immediately, while the workspace remains
+  // saved in their workspace library/history.
+  const didLeaveArchivedTeachingSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !roomCode ||
+      !isTeachingSession ||
+      isTeacher ||
+      workspaceStatus !== 'archived' ||
+      didLeaveArchivedTeachingSessionRef.current === roomCode
+    ) return;
+
+    didLeaveArchivedTeachingSessionRef.current = roomCode;
+    setIsCodeMode(false);
+    setIsFloatingChatOpen(false);
+    addToast('info', 'The teacher ended this teaching session. Your workspace has been saved.');
+    void handleNavigateRoom(null);
+  }, [
+    roomCode,
+    isTeachingSession,
+    isTeacher,
+    workspaceStatus,
+    addToast,
+    handleNavigateRoom,
+    setIsCodeMode
+  ]);
+
   // In teaching sessions Code Studio is a shared classroom surface. The room's
   // Firestore state is authoritative, so opening it from the teacher's device
   // automatically opens it for every participant.

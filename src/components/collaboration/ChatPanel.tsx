@@ -75,7 +75,8 @@ export function ChatPanel({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const didInitialScroll = useRef(false);
   const localChannelRef = useRef<BroadcastChannel | null>(null);
-  const cloudChatEnabled = Boolean(db && auth?.currentUser?.uid === currentUid);
+  const [serverRoomTransport, setServerRoomTransport] = useState(false);
+  const cloudChatEnabled = Boolean(db && auth?.currentUser?.uid === currentUid && !serverRoomTransport);
   const localStorageKey = roomId ? `livepad_chat_${roomId}` : '';
 
   const readLocalMessages = () => {
@@ -106,8 +107,31 @@ export function ChatPanel({
     if (!roomId || !currentUid) {
       setMessages([]);
       setChatError(null);
+      setServerRoomTransport(false);
       return;
     }
+
+    let cancelled = false;
+    setServerRoomTransport(false);
+
+    // Detect the shared public-room transport before selecting Firestore. This
+    // keeps every browser on the same message path.
+    const detectServerTransport = async () => {
+      try {
+        const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`, {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        });
+        if (!response.ok || cancelled) return;
+        const payload = await response.json();
+        if (payload?.room?.privacy !== 'private' && !cancelled) {
+          setServerRoomTransport(true);
+        }
+      } catch {
+        // Authenticated private rooms continue with Firestore.
+      }
+    };
+    void detectServerTransport();
 
     const mergeMessages = (incoming: ChatMessage[]) => {
       setMessages((current) => {
@@ -123,18 +147,23 @@ export function ChatPanel({
       mergeMessages(readLocalMessages());
       const loadServerMessages = async () => {
         try {
-          const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`);
+          const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { cache: 'no-store' });
           if (!response.ok) return;
           const payload = await response.json();
           if (Array.isArray(payload?.messages)) {
             mergeMessages(payload.messages as ChatMessage[]);
             payload.messages.forEach((message: ChatMessage) => persistLocalMessage(message));
             setChatError(null);
+            setOnline(true);
+          } else {
+            throw new Error('Invalid chat response');
           }
-        } catch {}
+        } catch {
+          if (!cancelled) setChatError('Live chat connection is unavailable. Retrying…');
+        }
       };
       void loadServerMessages();
-      const pollTimer = setInterval(() => { void loadServerMessages(); }, 1000);
+      const pollTimer = setInterval(() => { void loadServerMessages(); }, 600);
       if (typeof BroadcastChannel !== 'undefined') {
         const channel = new BroadcastChannel(`livepad-chat:${roomId}`);
         localChannelRef.current = channel;
@@ -167,7 +196,7 @@ export function ChatPanel({
       setChatError(error instanceof Error ? error.message : 'Chat connection failed.');
       setOnline(false);
     });
-  }, [roomId, currentUid, connectionAttempt, cloudChatEnabled]);
+  }, [roomId, currentUid, connectionAttempt, cloudChatEnabled, serverRoomTransport]);
 
   // Flush messages that were intentionally queued while offline or while Firestore was unavailable.
   useEffect(() => {
@@ -233,15 +262,21 @@ export function ChatPanel({
     setMessages((prev) => prev.some((item) => item.id === clientKey) ? prev : [...prev, optimistic]);
     try {
       if (!cloudChatEnabled) {
-        try {
-          const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(optimistic) });
-          if (!response.ok) throw new Error('server-chat-unavailable');
-        } catch {
-          // Same-browser fallback still works if the server is temporarily unavailable.
+        const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(optimistic),
+        });
+        if (!response.ok) {
+          throw new Error(`server-chat-unavailable:${response.status}`);
         }
-        persistLocalMessage(optimistic);
-        localChannelRef.current?.postMessage({ type: 'chat-message', message: optimistic });
+        const payload = await response.json().catch(() => ({}));
+        const savedMessage = (payload?.message || optimistic) as ChatMessage;
+        persistLocalMessage(savedMessage);
+        setMessages((prev) => prev.map((item) => item.id === clientKey ? savedMessage : item));
+        localChannelRef.current?.postMessage({ type: 'chat-message', message: savedMessage });
         setChatError(null);
+        setOnline(true);
       } else if (!online) {
         throw new Error('offline');
       } else {
@@ -318,7 +353,7 @@ export function ChatPanel({
           <div className="livepad-chat-icon"><MessageSquare size={16} /></div>
           <div className="min-w-0">
             <h2>Workspace chat</h2>
-            <p>{activeUsers.length || 1} participant{(activeUsers.length || 1) !== 1 ? 's' : ''} · {cloudChatEnabled ? (online ? 'Live' : 'Offline') : 'Local room'}</p>
+            <p>{activeUsers.length || 1} participant{(activeUsers.length || 1) !== 1 ? 's' : ''} · {online ? 'Live' : 'Offline'}</p>
           </div>
         </div>
         <div className="livepad-chat-header-actions">

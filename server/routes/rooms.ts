@@ -98,7 +98,9 @@ roomsRouter.get('/rooms/:roomCode/messages', (req, res) => {
   const items = Array.from(chat.get(code)?.values() || [])
     .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))
     .slice(-200);
-  return res.json({ messages: items });
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  return res.json({ messages: items, serverTime: Date.now() });
 });
 
 roomsRouter.post('/rooms/:roomCode/messages', (req, res) => {
@@ -107,13 +109,15 @@ roomsRouter.post('/rooms/:roomCode/messages', (req, res) => {
   if (!room || room.status === 'deleted') return res.status(404).json({ error: 'Workspace not found.' });
   if (room.privacy === 'private') return res.status(403).json({ error: 'Private workspaces require Firebase authentication.' });
   const message = req.body || {};
+  const timestamp = Number(message.timestamp || Date.now());
+  if (!Number.isFinite(timestamp)) return res.status(400).json({ error: 'Invalid message timestamp.' });
   const id = String(message.id || message.clientKey || '').trim();
   if (!id || id.length > 160 || !String(message.senderUid || '').trim()) {
     return res.status(400).json({ error: 'Invalid chat message.' });
   }
   let bucket = chat.get(code);
   if (!bucket) { bucket = new Map(); chat.set(code, bucket); }
-  const stored = { ...message, id };
+  const stored = { ...message, id, timestamp };
   bucket.set(id, stored);
   return res.status(201).json({ message: stored });
 });

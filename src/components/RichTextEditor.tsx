@@ -827,7 +827,7 @@ function RichTextEditorComponent({
         )}
       </AnimatePresence>
 
-      <EditorContent editor={editor} className="w-full flex-1 min-h-[450px] outline-none" />
+      <EditorContent editor={editor} className="w-full flex-1 min-h-[450px] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0" />
     </div>
   );
 }

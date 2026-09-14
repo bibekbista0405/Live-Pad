@@ -126,6 +126,8 @@ function RichTextEditorComponent({
 }: RichTextEditorProps) {
   const isUpdatingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const externalContentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingExternalContentRef = useRef<string | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
@@ -523,17 +525,41 @@ function RichTextEditorComponent({
     }
 
     if (editor.isFocused) {
-      // Do not rebuild the entire ProseMirror document while the user is typing.
-      // Parent state can lag a realtime snapshot by a few milliseconds; replacing
-      // the document here causes cursor jumps, lost selections and duplicate input.
-      // Remote updates are applied only when the editor is idle/blurred.
+      // Never replace the ProseMirror document underneath the local editor. A
+      // remote snapshot can arrive while this user is typing; applying it here
+      // produces cursor jumps, duplicate input and the visible 'rewriting'
+      // effect in collaborative sessions.
+      pendingExternalContentRef.current = null;
+      if (externalContentTimerRef.current) {
+        clearTimeout(externalContentTimerRef.current);
+        externalContentTimerRef.current = null;
+      }
       return;
     }
 
-    // Idle / non-focused document update
-    isUpdatingRef.current = true;
-    editor.commands.setContent(formattedTarget, { emitUpdate: false } as any);
-    isUpdatingRef.current = false;
+    // Remote fallback transport can publish several snapshots per second. Coalesce
+    // them and apply only the latest document after a short quiet period. This
+    // prevents the other participant's editor from visibly rewriting itself on
+    // every intermediate network snapshot.
+    pendingExternalContentRef.current = formattedTarget;
+    if (externalContentTimerRef.current) clearTimeout(externalContentTimerRef.current);
+    externalContentTimerRef.current = setTimeout(() => {
+      externalContentTimerRef.current = null;
+      if (!editor || editor.isFocused) return;
+      const latest = pendingExternalContentRef.current;
+      pendingExternalContentRef.current = null;
+      if (latest === null || normalizeHtmlForComparison(editor.getHTML()) === normalizeHtmlForComparison(latest)) return;
+      isUpdatingRef.current = true;
+      editor.commands.setContent(latest, { emitUpdate: false } as any);
+      isUpdatingRef.current = false;
+    }, 350);
+
+    return () => {
+      if (externalContentTimerRef.current) {
+        clearTimeout(externalContentTimerRef.current);
+        externalContentTimerRef.current = null;
+      }
+    };
   }, [content, editor]);
 
   useEffect(() => {
@@ -827,7 +853,7 @@ function RichTextEditorComponent({
         )}
       </AnimatePresence>
 
-      <EditorContent editor={editor} className="w-full flex-1 min-h-[450px] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0" />
+      <EditorContent editor={editor} className="w-full flex-1 min-h-[450px] outline-none" />
     </div>
   );
 }

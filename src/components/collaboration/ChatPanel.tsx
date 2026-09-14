@@ -112,23 +112,20 @@ export function ChatPanel({
     }
 
     let cancelled = false;
-    setServerRoomTransport(false);
-
-    // Detect the shared public-room transport before selecting Firestore. This
-    // keeps every browser on the same message path.
+    // If this room is registered with the LivePad public-room transport, prefer
+    // that transport even when Firebase Auth happens to exist in the browser.
+    // This prevents one client from writing to Firestore while another client
+    // is reading the server-backed collaboration room. Private rooms continue
+    // to use authenticated Firestore only.
     const detectServerTransport = async () => {
       try {
-        const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`, {
-          cache: 'no-store',
-          headers: { Accept: 'application/json' },
-        });
+        const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}`, { cache: 'no-store' });
         if (!response.ok || cancelled) return;
         const payload = await response.json();
-        if (payload?.room?.privacy !== 'private' && !cancelled) {
-          setServerRoomTransport(true);
-        }
+        const isPublicServerRoom = payload?.room?.privacy !== 'private';
+        if (isPublicServerRoom && !cancelled) setServerRoomTransport(true);
       } catch {
-        // Authenticated private rooms continue with Firestore.
+        // Firestore remains the fallback when the local server transport is unavailable.
       }
     };
     void detectServerTransport();
@@ -154,16 +151,11 @@ export function ChatPanel({
             mergeMessages(payload.messages as ChatMessage[]);
             payload.messages.forEach((message: ChatMessage) => persistLocalMessage(message));
             setChatError(null);
-            setOnline(true);
-          } else {
-            throw new Error('Invalid chat response');
           }
-        } catch {
-          if (!cancelled) setChatError('Live chat connection is unavailable. Retrying…');
-        }
+        } catch {}
       };
       void loadServerMessages();
-      const pollTimer = setInterval(() => { void loadServerMessages(); }, 600);
+      const pollTimer = setInterval(() => { void loadServerMessages(); }, 2000);
       if (typeof BroadcastChannel !== 'undefined') {
         const channel = new BroadcastChannel(`livepad-chat:${roomId}`);
         localChannelRef.current = channel;
@@ -262,21 +254,27 @@ export function ChatPanel({
     setMessages((prev) => prev.some((item) => item.id === clientKey) ? prev : [...prev, optimistic]);
     try {
       if (!cloudChatEnabled) {
-        const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify(optimistic),
-        });
-        if (!response.ok) {
-          throw new Error(`server-chat-unavailable:${response.status}`);
+        try {
+          const response = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(optimistic) });
+          if (!response.ok) {
+            const retryAfter = response.headers.get('Retry-After');
+            throw new Error(retryAfter ? `Chat server is busy. Retry in ${retryAfter}s.` : 'server-chat-unavailable');
+          }
+          const payload = await response.json().catch(() => null);
+          const stored = payload?.message ? ({ ...payload.message } as ChatMessage) : optimistic;
+          setMessages((prev) => prev.map((item) => item.id === clientKey ? stored : item));
+          persistLocalMessage(stored);
+          localChannelRef.current?.postMessage({ type: 'chat-message', message: stored });
+          setChatError(null);
+        } catch (error) {
+          // Keep the optimistic message locally, but do NOT clear the error: a
+          // successful local write must not pretend that a failed server send
+          // reached the other participants.
+          persistLocalMessage(optimistic);
+          localChannelRef.current?.postMessage({ type: 'chat-message', message: optimistic });
+          setChatError(error instanceof Error ? error.message : 'Live chat server is unavailable.');
+          onAddToast?.('error', 'Message was saved locally but could not reach the live chat server.');
         }
-        const payload = await response.json().catch(() => ({}));
-        const savedMessage = (payload?.message || optimistic) as ChatMessage;
-        persistLocalMessage(savedMessage);
-        setMessages((prev) => prev.map((item) => item.id === clientKey ? savedMessage : item));
-        localChannelRef.current?.postMessage({ type: 'chat-message', message: savedMessage });
-        setChatError(null);
-        setOnline(true);
       } else if (!online) {
         throw new Error('offline');
       } else {
@@ -353,7 +351,7 @@ export function ChatPanel({
           <div className="livepad-chat-icon"><MessageSquare size={16} /></div>
           <div className="min-w-0">
             <h2>Workspace chat</h2>
-            <p>{activeUsers.length || 1} participant{(activeUsers.length || 1) !== 1 ? 's' : ''} · {online ? 'Live' : 'Offline'}</p>
+            <p>{activeUsers.length || 1} participant{(activeUsers.length || 1) !== 1 ? 's' : ''} · {cloudChatEnabled ? (online ? 'Live' : 'Offline') : 'Local room'}</p>
           </div>
         </div>
         <div className="livepad-chat-header-actions">

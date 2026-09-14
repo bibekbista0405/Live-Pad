@@ -236,19 +236,9 @@ input[type="range"]::-moz-range-thumb {
 
 /* Tiptap ProseMirror Rich Text Editor Styles */
 .ProseMirror {
-  outline: none !important;
-  box-shadow: none !important;
-  border: 0 !important;
+  outline: none;
   min-height: 450px;
   height: 100%;
-}
-
-.ProseMirror:focus,
-.ProseMirror:focus-visible,
-.ProseMirror[contenteditable="true"]:focus {
-  outline: none !important;
-  box-shadow: none !important;
-  border: 0 !important;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {

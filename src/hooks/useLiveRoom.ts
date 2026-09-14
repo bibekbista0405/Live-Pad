@@ -327,11 +327,6 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
         const data = snapshot.data();
         const status = (data.status as WorkspaceStatus) || 'active';
         setWorkspaceStatus(status);
-        if (status !== 'active') {
-          // Keep the room descriptor in state so clients can react immediately
-          // to a teacher ending a session while preserving the saved workspace.
-          setError(`Workspace is currently ${status} and cannot be edited.`);
-        }
 
         const wsType: WorkspaceType = data.workspaceType || 'team';
         const typeDef = WORKSPACE_TYPES[wsType] || WORKSPACE_TYPES.team;
@@ -363,6 +358,15 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
           typingUsers: data.typingUsers || {},
           attachments: data.attachments || [],
         };
+
+        // Keep the archived/expired room descriptor in state instead of dropping
+        // it. Teaching sessions use this authoritative status transition to tell
+        // students to leave the live session while preserving the saved workspace.
+        if (status !== 'active') {
+          setError(`Workspace is currently ${status} and cannot be edited.`);
+          setRoom(roomData);
+          return;
+        }
 
         if (roomId) {
           const effectiveUid = uid || auth?.currentUser?.uid || localStorage.getItem('livepad_local_uid') || 'anonymous';
@@ -900,6 +904,7 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
             }
             return {
               ...prev,
+              status: (remote.status || prev.status || 'active') as WorkspaceStatus,
               content: remote.content !== undefined ? remote.content : prev.content,
               title: remote.title || remote.workspaceName || prev.title,
               label: remote.label ?? prev.label,
@@ -914,7 +919,7 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
           });
           try { localStorage.setItem(localRoomKey, typeof remote.content === 'string' ? remote.content : ''); } catch {}
         } catch {}
-      }, 1000) : null;
+      }, 3000) : null;
 
       // Broadcast heartbeat pulse to keep presence alive in browser tabs
       const heartbeatTimer = setInterval(() => {
@@ -1206,7 +1211,7 @@ export function useLiveRoom(roomId: string | null, userName: string): UseLiveRoo
           updateLockRef.current = false;
         }, 500);
       });
-    }, 250);
+    }, 700);
 
     // Typing State Trigger
     announceTyping(true);

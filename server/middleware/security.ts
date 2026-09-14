@@ -5,6 +5,7 @@ import { getAuth } from 'firebase-admin/auth';
 const MAX_JSON_BYTES = 5 * 1024 * 1024;
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 180;
+const COLLABORATION_MAX_REQUESTS = 1200;
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
 function getClientKey(req: Request) {
@@ -34,10 +35,17 @@ export function requestSecurity(req: Request, res: Response, next: NextFunction)
       if (value.resetAt <= now) buckets.delete(bucketKey);
     }
   }
+  // Collaboration clients legitimately make frequent room/message requests
+  // (polling + presence + edits). Give those endpoints a separate, higher
+  // per-IP ceiling so a classroom behind one NAT is not rate-limited as if it
+  // were a single abusive client. Keep the stricter default for other APIs.
+  const isCollaborationRequest = /^\/api\/rooms\//.test(req.path);
+  const requestLimit = isCollaborationRequest ? COLLABORATION_MAX_REQUESTS : MAX_REQUESTS;
+
   const bucket = buckets.get(key);
   if (!bucket || bucket.resetAt <= now) {
     buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
-  } else if (bucket.count >= MAX_REQUESTS) {
+  } else if (bucket.count >= requestLimit) {
     res.setHeader('Retry-After', Math.ceil((bucket.resetAt - now) / 1000));
     return res.status(429).json({ error: 'Too many requests. Please retry shortly.' });
   } else {
